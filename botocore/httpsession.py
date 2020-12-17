@@ -223,6 +223,7 @@ class URLLib3Session(object):
         else:
             conn.cert_reqs = 'CERT_NONE'
             conn.ca_certs = None
+        logger.debug(f"CA cert path: {conn.ca_certs}")  
 
     def _get_connection_manager(self, url, proxy_url=None):
         if proxy_url:
