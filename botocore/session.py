@@ -68,6 +68,7 @@ from botocore.utils import (
     EVENT_ALIASES,
     IMDSRegionProvider,
     validate_region_name,
+    is_valid_uri
 )
 
 logger = logging.getLogger(__name__)
@@ -916,7 +917,8 @@ class Session:
             config = default_client_config
 
         region_name = self._resolve_region_name(region_name, config)
-
+        endpoint_url = self._resolve_endpoint_url(
+            service_name, endpoint_url, config)
         # Figure out the verify value base on the various
         # configuration options.
         if verify is None:
@@ -989,6 +991,47 @@ class Session:
         if monitor is not None:
             monitor.register(client.meta.events)
         return client
+
+    def _resolve_endpoint_url(self, service_name, 
+                              endpoint_url=None, config=None):
+        # Figure out the user-provided endpoint URL based on the various
+        # configuration options.
+        if endpoint_url is None:
+            if config and config.endpoint_url is not None:
+                endpoint_url = config.endpoint_url
+            else:
+                global_endpoint_url = \
+                    self._resolve_global_endpoint_url()
+                service_endpoint_url = \
+                    self._resolve_service_specific_endpoint_url(
+                        service_name)
+
+                if service_endpoint_url:
+                    endpoint_url = service_endpoint_url
+        
+                else:
+                    endpoint_url = global_endpoint_url
+
+        return endpoint_url
+
+    def _get_service_specific_endpoint_name(self, service_name):
+        service_id = EVENT_ALIASES.get(service_name, service_name)
+        return "endpoint_url_" + service_id
+
+    def _resolve_service_specific_endpoint_url(self, service_name):
+        config_var_name = \
+            self._get_service_specific_endpoint_name(service_name)
+        endpoint_url = self.get_config_variable(config_var_name)
+        
+        if endpoint_url is not None:
+            is_valid_uri(endpoint_url)
+        return endpoint_url
+
+    def _resolve_global_endpoint_url(self):
+        endpoint_url = self.get_config_variable('endpoint_url')
+        if endpoint_url is not None:
+            is_valid_uri(endpoint_url)
+        return endpoint_url
 
     def _resolve_region_name(self, region_name, config):
         # Figure out the user-provided region based on the various

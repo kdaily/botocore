@@ -139,7 +139,9 @@ BOTOCORE_DEFAUT_SESSION_VARIABLES = {
     # We can't have a default here for v1 because we need to defer to
     # whatever the defaults are in _retry.json.
     'max_attempts': ('max_attempts', 'AWS_MAX_ATTEMPTS', None, int),
+    'endpoint_url': ('endpoint_url', 'AWS_ENDPOINT_URL', None, None),
 }
+
 # A mapping for the s3 specific configuration vars. These are the configuration
 # vars that typically go in the s3 section of the config file. This mapping
 # follows the same schema as the previous session variable mapping.
@@ -199,9 +201,47 @@ DEFAULT_PROXIES_CONFIG_VARS = {
     ),
 }
 
+class ServiceNameProvider:
+    """Fake what is needed to provide service names."""
+    _SERVICE_NAMES  = ['s3']
+
+    def __init__(self):
+        self._service_names = self._SERVICE_NAMES
+
+    def get_available_services(self):
+        return self._service_names
+
+def _create_endpoint_url_default_session_variables(session):
+    """Create endpoint entries as default botocore session variables.
+    
+    Adds an entry for each service to read from an environment variable
+    or a configuration file parameter.
+    """
+    envvar_name_prefix = "AWS_ENDPOINT_URL_"
+    config_name = "endpoint_url"
+
+    results = {}
+    for service_name in session.get_available_services():
+        service_id = utils.EVENT_ALIASES.get(service_name, service_name)
+        data = ((service_id, config_name),
+                envvar_name_prefix + service_id.upper(),
+                None, None)
+        results[config_name + "_" + service_id] = \
+            data
+
+    return results
+
+def _update_botocore_default_session_variables():
+    """Update the global session variable dict."""
+    session = ServiceNameProvider()
+    endpoint_vars = _create_endpoint_url_default_session_variables(session)
+    BOTOCORE_DEFAUT_SESSION_VARIABLES.update(endpoint_vars)
 
 def create_botocore_default_config_mapping(session):
     chain_builder = ConfigChainFactory(session=session)
+
+    _update_botocore_default_session_variables()
+
     config_mapping = _create_config_chain_mapping(
         chain_builder, BOTOCORE_DEFAUT_SESSION_VARIABLES
     )
