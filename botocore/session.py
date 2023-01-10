@@ -984,6 +984,7 @@ class Session:
             client_config=config,
             api_version=api_version,
             auth_token=auth_token,
+            full_config=self.full_config,
         )
         monitor = self._get_internal_component('monitor')
         if monitor is not None:

@@ -1,0 +1,10 @@
+[default]
+services = my-services
+
+[services my-services]
+endpoint_url = https://localhost:1234/
+s3 = 
+  endpoint_url = https://localhost:5678/
+  addressing_style = path
+dynamodb =
+  endpoint_url = https://localhost:8888/

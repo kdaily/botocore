@@ -24,6 +24,7 @@ import botocore.exceptions
 import botocore.parsers
 import botocore.serialize
 from botocore.config import Config
+from botocore.endpoint_provider import ConfiguredEndpointProviderChain
 from botocore.endpoint import EndpointCreator
 from botocore.regions import EndpointResolverBuiltins as EPRBuiltins
 from botocore.regions import EndpointRulesetResolver
@@ -88,6 +89,7 @@ class ClientArgsCreator:
         auth_token=None,
         endpoints_ruleset_data=None,
         partition_data=None,
+        full_config=None,
     ):
         final_args = self.compute_client_args(
             service_model,
@@ -97,6 +99,7 @@ class ClientArgsCreator:
             endpoint_url,
             is_secure,
             scoped_config,
+            full_config,
         )
 
         service_name = final_args['service_name']  # noqa
@@ -182,6 +185,7 @@ class ClientArgsCreator:
         endpoint_url,
         is_secure,
         scoped_config,
+        full_config,
     ):
         service_name = service_model.endpoint_prefix
         protocol = service_model.metadata['protocol']
@@ -202,6 +206,10 @@ class ClientArgsCreator:
                 user_agent += ' %s' % client_config.user_agent_extra
 
         s3_config = self.compute_s3_config(client_config)
+
+        endpoint_url = self._compute_configured_endpoint_url(
+            endpoint_url, scoped_config, full_config, service_model)
+
         endpoint_config = self._compute_endpoint_config(
             service_name=service_name,
             region_name=region_name,
@@ -258,6 +266,16 @@ class ClientArgsCreator:
                 scoped_config, client_config
             ),
         }
+
+    def _compute_configured_endpoint_url(
+        self, endpoint_url, scoped_config, full_config, service_model):
+            if endpoint_url is not None:
+                return endpoint_url
+            chain = ConfiguredEndpointProviderChain(
+                full_config=full_config, scoped_config=scoped_config,
+                service_model=service_model)
+            endpoint = chain.provide()
+            return endpoint
 
     def compute_s3_config(self, client_config):
         s3_configuration = self._config_store.get_config_variable('s3')
