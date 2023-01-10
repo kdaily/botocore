@@ -107,6 +107,12 @@ class TestCreateClientArgs(unittest.TestCase):
             self.service_model, **call_kwargs
         )
 
+    def test_compute_configured_endpoint_url(self):
+        endpoint_url = self.args_create._compute_configured_endpoint_url(
+            endpoint_url=self.endpoint_url, scoped_config={},
+            full_config={}, service_model=self._get_service_model())
+        self.assertEqual(self.endpoint_url, endpoint_url)
+
     def test_compute_s3_configuration(self):
         self.assertIsNone(self.args_create.compute_s3_config(None))
 

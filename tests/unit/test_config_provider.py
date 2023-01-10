@@ -527,6 +527,7 @@ class TestSectionConfigProvider(unittest.TestCase):
     ):
         fake_session = mock.Mock(spec=session.Session)
         fake_session.get_scoped_config.return_value = config_file_values
+        fake_session.full_config = config_file_values
         provider = SectionConfigProvider(
             section_name=section_name,
             session=fake_session,
