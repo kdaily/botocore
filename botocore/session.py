@@ -992,7 +992,7 @@ class Session:
             monitor.register(client.meta.events)
         return client
 
-    def _resolve_endpoint_url(self, service_name, 
+    def _resolve_endpoint_url(self, service_name,
                               endpoint_url=None, config=None):
         # Figure out the user-provided endpoint URL based on the various
         # configuration options.
@@ -1006,10 +1006,12 @@ class Session:
                     self._resolve_service_specific_endpoint_url(
                         service_name)
 
+                logger.debug(f"global: {global_endpoint_url}, service: {service_endpoint_url}")
                 if service_endpoint_url:
+                    logger.debug(f"Service-specific custom endpoint found: {service_endpoint_url}")
                     endpoint_url = service_endpoint_url
-        
                 else:
+                    logger.debug(f"Global custom endpoint found: {global_endpoint_url}")
                     endpoint_url = global_endpoint_url
 
         return endpoint_url
@@ -1021,8 +1023,10 @@ class Session:
     def _resolve_service_specific_endpoint_url(self, service_name):
         config_var_name = \
             self._get_service_specific_endpoint_name(service_name)
+        logger.debug(
+            f"Looking for custom service specific endpoint in {config_var_name}")
         endpoint_url = self.get_config_variable(config_var_name)
-        
+
         if endpoint_url is not None:
             is_valid_uri(endpoint_url)
         return endpoint_url

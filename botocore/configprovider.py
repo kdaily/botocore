@@ -201,9 +201,17 @@ DEFAULT_PROXIES_CONFIG_VARS = {
     ),
 }
 
+
 class ServiceNameProvider:
-    """Fake what is needed to provide service names."""
-    _SERVICE_NAMES  = ['s3']
+    """
+    Provide service names.
+
+    This is used because getting a session would create a circular import
+    from botocore.session.
+
+    TODO: Remove this and get the service names from somewhere else.
+    """
+    _SERVICE_NAMES = ['s3', 'kms', 'batch']
 
     def __init__(self):
         self._service_names = self._SERVICE_NAMES
@@ -211,9 +219,10 @@ class ServiceNameProvider:
     def get_available_services(self):
         return self._service_names
 
+
 def _create_endpoint_url_default_session_variables(session):
     """Create endpoint entries as default botocore session variables.
-    
+
     Adds an entry for each service to read from an environment variable
     or a configuration file parameter.
     """
@@ -223,28 +232,41 @@ def _create_endpoint_url_default_session_variables(session):
     results = {}
     for service_name in session.get_available_services():
         service_id = utils.EVENT_ALIASES.get(service_name, service_name)
-        data = ((service_id, config_name),
-                envvar_name_prefix + service_id.upper(),
+        data = ([(service_id, config_name), 'endpoint_url'],
+                [envvar_name_prefix + service_id.upper(), 'AWS_ENDPOINT_URL'],
                 None, None)
         results[config_name + "_" + service_id] = \
             data
 
     return results
 
-def _update_botocore_default_session_variables():
+
+def _get_botocore_endpoint_url_variables(session=None):
     """Update the global session variable dict."""
-    session = ServiceNameProvider()
+
+    if not session:
+        session = ServiceNameProvider()
+
     endpoint_vars = _create_endpoint_url_default_session_variables(session)
-    BOTOCORE_DEFAUT_SESSION_VARIABLES.update(endpoint_vars)
+    return endpoint_vars
+
 
 def create_botocore_default_config_mapping(session):
     chain_builder = ConfigChainFactory(session=session)
 
-    _update_botocore_default_session_variables()
+    endpoint_vars = _get_botocore_endpoint_url_variables()
+
+    endpoint_config_mapping = _create_config_chain_mapping(
+        chain_builder, endpoint_vars
+    )
 
     config_mapping = _create_config_chain_mapping(
         chain_builder, BOTOCORE_DEFAUT_SESSION_VARIABLES
     )
+
+    BOTOCORE_DEFAUT_SESSION_VARIABLES.update(endpoint_vars)
+    config_mapping.update(endpoint_config_mapping)
+
     config_mapping['s3'] = SectionConfigProvider(
         's3',
         session,
@@ -257,6 +279,7 @@ def create_botocore_default_config_mapping(session):
             chain_builder, DEFAULT_PROXIES_CONFIG_VARS
         ),
     )
+
     return config_mapping
 
 
@@ -421,6 +444,10 @@ class ConfigChainFactory:
                 )
             )
         return scoped_config_providers
+
+
+class EndpointConfigChainFactory(ConfigChainFactory):
+    pass
 
 
 class ConfigValueStore:
@@ -665,6 +692,7 @@ class ChainProvider(BaseProvider):
         ChainProvider. When no non-None value is found, None is returned.
         """
         for provider in self._providers:
+            logger.debug(f"Using provider {provider}.")
             value = provider.provide()
             if value is not None:
                 return self._convert_type(value)
