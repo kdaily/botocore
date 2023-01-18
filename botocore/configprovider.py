@@ -836,3 +836,176 @@ class ConstantProvider(BaseProvider):
 
     def __repr__(self):
         return 'ConstantProvider(value=%s)' % self._value
+
+
+class LinkedSectionProvider(BaseProvider):
+    """Provides a dictionary from a section linked in the scoped config
+
+    This is useful for retrieving linked config variables (i.e. sso-session or services)
+    that have their own set of config variables and resolving logic.
+    """
+
+    def __init__(self):
+        pass
+
+    def __init__(self, linked_section_name, session):
+        self._linked_section_name = linked_section_name
+        self._session = session
+
+    def __deepcopy__(self, memo):
+        return LinkedSectionProvider(
+            copy.deepcopy(self._linked_section_name, memo),
+            self._session,
+            copy.deepcopy(self._override_providers, memo),
+        )
+
+    def provide(self):
+        loaded_config = self._session.full_config
+
+        profiles = loaded_config.get("profiles", {})
+        services = loaded_config.get(self._linked_section_name, {})
+        profile_name = self._session.get_config_variable("profile")
+
+        if not profile_name:
+            profile_name = "default"
+        profile_config = profiles.get(profile_name, {})
+
+        if self._linked_section_name not in profile_config:
+            return
+
+        linked_section_value = profile_config.get(self._linked_section_name, {})
+        linked_section_config = services.get(linked_section_value, None)
+        if not linked_section_config:
+            return
+            # error_msg = (
+            #     f'The profile "{profile_name}" is configured to use the {self._linked_section_name} '
+            #     f'section but the "{linked_section_value}" {self._linked_section_name} '
+            #     f"configuration does not exist."
+            # )
+            # raise InvalidConfigError(error_msg=error_msg)
+
+        return linked_section_config
+
+
+    def __repr__(self):
+        return (
+            f'LinkedSectionProvider(linked_section_name={self._linked_section_name}, '
+            f'session={self._session})'
+        )
+
+class LinkedConfigProvider(BaseProvider):
+    def __init__(self, linked_section_name, config_var_name, session):
+        """Initialize LinkedConfigProvider.
+
+        :type config_var_name: str or tuple
+        :param config_var_name: The name of the config variable to load from
+            the configuration file. If the value is a tuple, it must only
+            consist of two items, where the first item represents the section
+            and the second item represents the config var name in the section.
+
+        :type session: :class:`botocore.session.Session`
+        :param session: The botocore session to get the loaded configuration
+            file variables from.
+        """
+        self._linked_section_name = linked_section_name
+        self._config_var_name = config_var_name
+        self._session = session
+
+        self._linked_section_provider = \
+            LinkedSectionProvider(
+                linked_section_name=self._linked_section_name,
+                session=self._session)
+
+    def __deepcopy__(self, memo):
+        return LinkedConfigProvider(
+            copy.deepcopy(self._linked_section_name),
+            copy.deepcopy(self._config_var_name, memo),
+            copy.deepcopy(self._linked_section_provider, memo),
+            self._session
+        )
+
+    def provide(self):
+        """Provide a value from a config file property."""
+        scoped_config = self._linked_section_provider.provide()
+        if isinstance(self._config_var_name, tuple):
+            section_config = scoped_config.get(self._config_var_name[0])
+            if not isinstance(section_config, dict):
+                return None
+            return section_config.get(self._config_var_name[1])
+        return scoped_config.get(self._config_var_name)
+
+    def __repr__(self):
+        return 'LinkedConfigProvider(linked_section_name={}, config_var_name={}, session={})'.format(
+            self._linked_section_name,
+            self._config_var_name,
+            self._session,
+        )
+
+
+class CustomEndpointProviderChain:
+
+    _LINKED_SECTION_NAME = 'services'
+    _GLOBAL_ENV_NAME = "AWS_ENDPOINT_URL"
+    _VAR_NAME = 'endpoint_url'
+
+    def __init__(self, session, service, environ=None):
+        """Initialize a CustomEndpointProviderChain.
+
+        :type session: :class:`botocore.session.Session`
+        :param session: This is the session that should be used to look up
+            values from the config file.
+
+        :type environ: dict
+        :param environ: A mapping to use for environment variables. If this
+            is not provided it will default to use os.environ.
+        """
+        self._session = session
+        self._service = service
+
+        if environ is None:
+            environ = os.environ
+        self._environ = environ
+
+        self._instance_var_provider = InstanceVarProvider(
+                    instance_var=self._VAR_NAME, session=self._session
+                )
+
+        self._global_config_provider = \
+            LinkedConfigProvider(
+                linked_section_name=self._LINKED_SECTION_NAME,
+                config_var_name=self._VAR_NAME,
+                session=self._session)
+
+        self._service_config_provider = \
+            LinkedConfigProvider(
+                linked_section_name=self._LINKED_SECTION_NAME,
+                config_var_name=(self._service, self._VAR_NAME),
+                session=self._session)
+
+        self._global_env_provider = \
+            EnvironmentProvider(name=self._GLOBAL_ENV_NAME, 
+                                env=self._environ)
+        
+        self._service_env_provider = \
+            EnvironmentProvider(name=f"{self._GLOBAL_ENV_NAME}_{self._service}", 
+                                env=self._environ)
+
+        self._providers = [
+            self._instance_var_provider,
+            self._service_env_provider,
+            self._global_env_provider,
+            self._service_config_provider,
+            self._global_config_provider
+        ]
+
+    def provide(self):
+
+        for provider in self._providers:
+
+            endpoint_value = \
+                provider.provide()
+
+            if endpoint_value:
+                return endpoint_value
+
+        return None
