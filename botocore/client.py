@@ -152,6 +152,10 @@ class ClientCreator:
                 'signatureVersion'
             ),
         )
+
+        endpoint_url = self._get_custom_endpoint_url(
+            endpoint_url, service_name)
+
         client_args = self._get_client_args(
             service_model,
             region_name,
@@ -297,6 +301,14 @@ class ClientCreator:
                 copied_args.pop('total_max_attempts') - 1
             )
         return copied_args
+
+    def _get_custom_endpoint_url(
+        self, endpoint_url, service_name):
+        if endpoint_url is None:
+            return None
+
+        return self._config_store.get_config_variable(
+            f"endpoint_url_{service_name}")
 
     def _get_retry_mode(self, client, config_store):
         client_retries = client.meta.config.retries
