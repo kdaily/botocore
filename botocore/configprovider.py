@@ -217,6 +217,12 @@ def create_botocore_default_config_mapping(session):
             chain_builder, DEFAULT_PROXIES_CONFIG_VARS
         ),
     )
+
+    # TODO: How to do this for all services?
+    for service in ['s3', 'kms', 'batch']:
+        config_mapping[f'endpoint_url_{service}'] = \
+            CustomEndpointProviderChain(session=session, service=service)
+
     return config_mapping
 
 
@@ -862,6 +868,7 @@ class LinkedSectionProvider(BaseProvider):
     def provide(self):
         loaded_config = self._session.full_config
 
+        print(f"loaded_config = {loaded_config}")
         profiles = loaded_config.get("profiles", {})
         services = loaded_config.get(self._linked_section_name, {})
         profile_name = self._session.get_config_variable("profile")
@@ -927,6 +934,9 @@ class LinkedConfigProvider(BaseProvider):
     def provide(self):
         """Provide a value from a config file property."""
         scoped_config = self._linked_section_provider.provide()
+        print(f"scoped_config = {scoped_config}")
+        if not isinstance(scoped_config, dict):
+                return None
         if isinstance(self._config_var_name, tuple):
             section_config = scoped_config.get(self._config_var_name[0])
             if not isinstance(section_config, dict):
@@ -987,7 +997,7 @@ class CustomEndpointProviderChain:
                                 env=self._environ)
         
         self._service_env_provider = \
-            EnvironmentProvider(name=f"{self._GLOBAL_ENV_NAME}_{self._service}", 
+            EnvironmentProvider(name=f"{self._GLOBAL_ENV_NAME}_{self._service.upper()}", 
                                 env=self._environ)
 
         self._providers = [
@@ -1006,6 +1016,9 @@ class CustomEndpointProviderChain:
                 provider.provide()
 
             if endpoint_value:
+                print(f"found endpoint with provider = {provider}")
                 return endpoint_value
+            else:
+                print(f"NO found endpoint with provider = {provider}")
 
         return None
