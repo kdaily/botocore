@@ -35,6 +35,28 @@ from botocore.exceptions import ConnectTimeoutError
 from botocore.utils import IMDSRegionProvider
 from tests import mock, unittest
 
+custom_endpoint_provider_resolution_cases = [
+    {
+        "documentation": "Full valid profile",
+        "config": {
+            "profiles": {"test": {"services": "my-services"}},
+            "services": {
+                "endpoint_url": "https://global-config-endpoint.aws:1234/",
+                "s3": {
+                    "endpoint_url": "https://s3-config-endpoint.aws:1234/"
+                }
+            }
+        },
+        "resolves": {"s3": "https://s3-config-endpoint.aws:1234/"},
+    }
+]
+
+def _create_mock_session(config):
+    mock_session = mock.Mock(spec=session.Session)
+    mock_session.get_config_variable.return_value = "test"
+    mock_session.full_config = config
+    return mock_session
+
 
 class TestConfigChainFactory(unittest.TestCase):
     def assert_chain_does_provide(
@@ -517,6 +539,54 @@ class TestLinkedSectionConfigProvider(unittest.TestCase):
             linked_section_name="services",
             expected_value=None,
         )
+
+class TestCustomEndpointProviderChain(unittest.TestCase):
+    def assert_provides_value(
+        self,
+        config_file_values,
+        linked_section_name,
+        expected_value
+    ):
+        fake_session = mock.Mock(spec=session.Session)
+        fake_session.full_config = config_file_values
+        fake_session.get_config_variable.return_value = "test"
+
+        provider = LinkedSectionProvider(
+            linked_section_name=linked_section_name,
+            session=fake_session
+        )
+        value = provider.provide()
+        self.assertEqual(value, expected_value)
+
+    def test_provide_section_config(self):
+        full_config = {
+            "profiles": {
+                "test": {"services": "my-services"}
+            },
+            "services": {
+                "my-services": {
+                    "endpoint_url": "https://global-config-endpoint.aws:1234/",
+                    "s3": {
+                        "endpoint_url": "https://s3-config-endpoint.aws:1234/"
+                    }
+                }
+            }
+        }
+
+        expected_section = {
+            "endpoint_url": "https://global-config-endpoint.aws:1234/",
+            "s3": {
+                "endpoint_url": "https://s3-config-endpoint.aws:1234/"
+            }
+        }
+
+        self.assert_provides_value(
+            config_file_values=full_config,
+            linked_section_name='services',
+            expected_value=expected_section)
+
+
+
 def _make_provider_that_returns(return_value):
     provider = mock.Mock(spec=BaseProvider)
     provider.provide.return_value = return_value
