@@ -1011,14 +1011,13 @@ class CustomEndpointProviderChain:
     def provide(self):
 
         for provider in self._providers:
+            logger.info(f"Checking for endpoint with provider = {provider}")
 
             endpoint_value = \
                 provider.provide()
 
             if endpoint_value:
-                print(f"found endpoint with provider = {provider}")
+                logger.info(f"found endpoint with provider = {provider}")
                 return endpoint_value
-            else:
-                print(f"NO found endpoint with provider = {provider}")
 
         return None
