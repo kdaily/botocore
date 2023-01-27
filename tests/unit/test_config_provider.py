@@ -651,13 +651,13 @@ class TestCustomEndpointProviderChain(unittest.TestCase):
             expected_value='global-from-config',
         )
 
-    @pytest.mark.parametrize("service", ['batch'])
-    def test_service_env_var_name_is_correct(self, service):
-        fake_session = mock.Mock(spec=session.Session)
-        fake_session.get_config_variable.return_value = 'default'
-        chain = CustomEndpointProviderChain(
-            session=fake_session, service=service, environ={})
-        assert chain._service_env_var_name == f"AWS_ENDPOINT_URL_{service}"
+@pytest.mark.parametrize("service_name", ['batch'])
+def test_service_env_var_name_is_correct(service_name):
+    fake_session = mock.Mock(spec=session.Session)
+    fake_session.get_config_variable.return_value = 'default'
+    chain = CustomEndpointProviderChain(
+        session=fake_session, service=service_name, environ={})
+    assert chain._service_env_var_name == f"AWS_ENDPOINT_URL_{service_name.upper()}"
 
 def _make_provider_that_returns(return_value):
     provider = mock.Mock(spec=BaseProvider)
