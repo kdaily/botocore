@@ -29,11 +29,13 @@ from botocore.configprovider import (
     ScopedConfigProvider,
     SectionConfigProvider,
     SmartDefaultsConfigStoreFactory,
-    LinkedSectionProvider
+    LinkedSectionProvider,
+    CustomEndpointProviderChain,
 )
 from botocore.exceptions import ConnectTimeoutError
 from botocore.utils import IMDSRegionProvider
 from tests import mock, unittest
+
 
 custom_endpoint_provider_resolution_cases = [
     {
@@ -541,51 +543,121 @@ class TestLinkedSectionConfigProvider(unittest.TestCase):
         )
 
 class TestCustomEndpointProviderChain(unittest.TestCase):
-    def assert_provides_value(
+    def assert_chain_does_provide(
         self,
-        config_file_values,
-        linked_section_name,
-        expected_value
+        service,
+        instance_map,
+        environ_map,
+        full_config_map,
+        expected_value,
     ):
         fake_session = mock.Mock(spec=session.Session)
-        fake_session.full_config = config_file_values
-        fake_session.get_config_variable.return_value = "test"
-
-        provider = LinkedSectionProvider(
-            linked_section_name=linked_section_name,
-            session=fake_session
-        )
-        value = provider.provide()
+        fake_session.get_config_variable.return_value = 'default'
+        fake_session.full_config = full_config_map
+        fake_session.instance_variables.return_value = instance_map
+        chain = CustomEndpointProviderChain(
+            session=fake_session, service=service, environ=environ_map)
+        value = chain.provide()
         self.assertEqual(value, expected_value)
 
-    def test_provide_section_config(self):
-        full_config = {
-            "profiles": {
-                "test": {"services": "my-services"}
-            },
-            "services": {
-                "my-services": {
-                    "endpoint_url": "https://global-config-endpoint.aws:1234/",
-                    "s3": {
-                        "endpoint_url": "https://s3-config-endpoint.aws:1234/"
-                    }
-                }
-            }
-        }
+    def test_chain_builder_can_provide_env_var(self):
+        self.assert_chain_does_provide(
+            service="batch",
+            instance_map={},
+            environ_map={'AWS_ENDPOINT_URL': 'from-env'},
+            full_config_map={},
+            expected_value='from-env',
+        )
 
-        expected_section = {
-            "endpoint_url": "https://global-config-endpoint.aws:1234/",
-            "s3": {
-                "endpoint_url": "https://s3-config-endpoint.aws:1234/"
-            }
-        }
+    def test_does_provide_none_if_no_variable_exists_in_env_var_list(self):
+        self.assert_chain_does_provide(
+            service="batch",
+            instance_map={},
+            environ_map={},
+            full_config_map={},
+            expected_value=None,
+        )
 
-        self.assert_provides_value(
-            config_file_values=full_config,
-            linked_section_name='services',
-            expected_value=expected_section)
+    # TODO: Should probably have an interface more similar to this
+    # where a config factory creator can set the env var names to search for
+    # so that it could look at AWS_ENDPOINT_URL_SERVICE and then AWS_ENDPOINT_URL
+    # without necessarily having to configure that in the class definition
+    # def test_does_provide_value_if_variable_exists_in_env_var_list(self):
+    #     self.assert_chain_does_provide(
+    #         instance_map={},
+    #         environ_map={'FOO': 'bar'},
+    #         scoped_config_map={},
+    #         create_config_chain_args={
+    #             'env_var_names': ['FOO'],
+    #         },
+    #         expected_value='bar',
+    #     )
 
+    def test_does_provide_service_value_when_both_env_vars_exist(self):
+        self.assert_chain_does_provide(
+            service="batch",
+            instance_map={},
+            environ_map={'AWS_ENDPOINT_URL_BATCH': 'batch-endpoint-url', 
+                         'AWS_ENDPOINT_URL': 'global-endpoint-url'},
+            full_config_map={},
+            expected_value='batch-endpoint-url',
+        )
 
+    def test_does_provide_global_value_when_both_env_vars_exist(self):
+        # Use a different service than the one set for the env variable
+        self.assert_chain_does_provide(
+            service="batch",
+            instance_map={},
+            environ_map={'AWS_ENDPOINT_URL_S3': 's3-endpoint-url', 
+                         'AWS_ENDPOINT_URL': 'global-endpoint-url'},
+            full_config_map={},
+            expected_value='global-endpoint-url',
+        )
+
+    def test_can_provide_service_config_var(self):
+        self.assert_chain_does_provide(
+            service="batch",
+            instance_map={},
+            environ_map={},
+            full_config_map={
+                'profiles':{'default': {
+                    'services':'my-services'}},
+                'services': {'my-services': {
+                    'endpoint_url': 'global-from-config'}}},
+            expected_value='global-from-config',
+        )
+
+    def test_can_provide_service_config_var_over_global(self):
+        self.assert_chain_does_provide(
+            service="batch",
+            instance_map={},
+            environ_map={},
+            full_config_map={'profiles':{'default': {'services':'my-services'}},
+                             'services': {'my-services': {
+                                'endpoint_url': 'global-from-config', 
+                                'batch': {'endpoint_url': "batch-from-config"}}}},
+            expected_value='batch-from-config',
+        )
+
+    def test_can_provide_service_config_var_over_global_diff_service(self):
+        self.assert_chain_does_provide(
+            service="s3",
+            instance_map={},
+            environ_map={},
+            full_config_map={'profiles':{'default': {'services':'my-services'}},
+                             'services': {'my-services': {
+                                'endpoint_url': 'global-from-config', 
+                                'batch': {'endpoint_url': "batch-from-config"}}}},
+            expected_value='global-from-config',
+        )
+
+    @pytest.mark.parametrize("service", ['batch'])
+    def test_service_env_var_name_is_correct(self, service):
+        fake_session = mock.Mock(spec=session.Session)
+        fake_session.get_config_variable.return_value = 'default'
+        chain = CustomEndpointProviderChain(
+            session=fake_session, service=service, environ={})
+        assert chain._service_env_var_name == f"AWS_ENDPOINT_URL_{service}"
 
 def _make_provider_that_returns(return_value):
     provider = mock.Mock(spec=BaseProvider)
@@ -960,3 +1032,4 @@ class TestSmartDefaults:
             )
             mode = smart_defaults_factory.resolve_auto_mode('us-west-2')
             assert mode == 'standard'
+

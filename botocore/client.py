@@ -304,8 +304,9 @@ class ClientCreator:
 
     def _get_custom_endpoint_url(
         self, endpoint_url, service_name):
-        if endpoint_url is None:
-            return None
+        if endpoint_url is not None:
+            logger.info(f"Already found an endpoint for {service_name} = {endpoint_url}")
+            return endpoint_url
 
         return self._config_store.get_config_variable(
             f"endpoint_url_{service_name}")

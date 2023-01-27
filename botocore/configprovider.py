@@ -666,6 +666,8 @@ class ChainProvider(BaseProvider):
 class InstanceVarProvider(BaseProvider):
     """This class loads config values from the session instance vars."""
 
+    METHOD = "instance-variable"
+
     def __init__(self, instance_var, session):
         """Initialize InstanceVarProvider.
 
@@ -739,6 +741,8 @@ class ScopedConfigProvider(BaseProvider):
 class EnvironmentProvider(BaseProvider):
     """This class loads config values from environment variables."""
 
+    METHOD = "environment"
+
     def __init__(self, name, env):
         """Initialize with the keys in the dictionary to check.
 
@@ -772,6 +776,8 @@ class SectionConfigProvider(BaseProvider):
     This is useful for retrieving scoped config variables (i.e. s3) that have
     their own set of config variables and resolving logic.
     """
+
+    METHOD = "config-file"
 
     def __init__(self, section_name, session, override_providers=None):
         self._section_name = section_name
@@ -830,6 +836,8 @@ class SectionConfigProvider(BaseProvider):
 class ConstantProvider(BaseProvider):
     """This provider provides a constant value."""
 
+    METHOD = "constant-value"
+
     def __init__(self, value):
         self._value = value
 
@@ -851,9 +859,6 @@ class LinkedSectionProvider(BaseProvider):
     that have their own set of config variables and resolving logic.
     """
 
-    def __init__(self):
-        pass
-
     def __init__(self, linked_section_name, session):
         self._linked_section_name = linked_section_name
         self._session = session
@@ -861,14 +866,11 @@ class LinkedSectionProvider(BaseProvider):
     def __deepcopy__(self, memo):
         return LinkedSectionProvider(
             copy.deepcopy(self._linked_section_name, memo),
-            self._session,
-            copy.deepcopy(self._override_providers, memo),
+            self._session
         )
 
     def provide(self):
         loaded_config = self._session.full_config
-
-        print(f"loaded_config = {loaded_config}")
         profiles = loaded_config.get("profiles", {})
         services = loaded_config.get(self._linked_section_name, {})
         profile_name = self._session.get_config_variable("profile")
@@ -896,11 +898,12 @@ class LinkedSectionProvider(BaseProvider):
 
     def __repr__(self):
         return (
-            f'LinkedSectionProvider(linked_section_name={self._linked_section_name}, '
-            f'session={self._session})'
+            f'LinkedSectionProvider(linked_section_name={self._linked_section_name})'
         )
 
 class LinkedConfigProvider(BaseProvider):
+    METHOD = "section-config"
+
     def __init__(self, linked_section_name, config_var_name, session):
         """Initialize LinkedConfigProvider.
 
@@ -927,14 +930,12 @@ class LinkedConfigProvider(BaseProvider):
         return LinkedConfigProvider(
             copy.deepcopy(self._linked_section_name),
             copy.deepcopy(self._config_var_name, memo),
-            copy.deepcopy(self._linked_section_provider, memo),
             self._session
         )
 
     def provide(self):
         """Provide a value from a config file property."""
         scoped_config = self._linked_section_provider.provide()
-        print(f"scoped_config = {scoped_config}")
         if not isinstance(scoped_config, dict):
                 return None
         if isinstance(self._config_var_name, tuple):
@@ -945,10 +946,9 @@ class LinkedConfigProvider(BaseProvider):
         return scoped_config.get(self._config_var_name)
 
     def __repr__(self):
-        return 'LinkedConfigProvider(linked_section_name={}, config_var_name={}, session={})'.format(
+        return 'LinkedConfigProvider(linked_section_name={}, config_var_name={})'.format(
             self._linked_section_name,
-            self._config_var_name,
-            self._session,
+            self._config_var_name
         )
 
 
@@ -971,14 +971,12 @@ class CustomEndpointProviderChain:
         """
         self._session = session
         self._service = service
+        self._service_env_var_name = \
+        f"{self._GLOBAL_ENV_NAME}_{self._service.upper()}"
 
         if environ is None:
             environ = os.environ
         self._environ = environ
-
-        self._instance_var_provider = InstanceVarProvider(
-                    instance_var=self._VAR_NAME, session=self._session
-                )
 
         self._global_config_provider = \
             LinkedConfigProvider(
@@ -997,11 +995,10 @@ class CustomEndpointProviderChain:
                                 env=self._environ)
         
         self._service_env_provider = \
-            EnvironmentProvider(name=f"{self._GLOBAL_ENV_NAME}_{self._service.upper()}", 
+            EnvironmentProvider(name=self._service_env_var_name, 
                                 env=self._environ)
 
         self._providers = [
-            self._instance_var_provider,
             self._service_env_provider,
             self._global_env_provider,
             self._service_config_provider,
@@ -1011,13 +1008,20 @@ class CustomEndpointProviderChain:
     def provide(self):
 
         for provider in self._providers:
-            logger.info(f"Checking for endpoint with provider = {provider}")
+            logger.info(f"Checking for endpoint with provider = {provider.METHOD}")
 
             endpoint_value = \
                 provider.provide()
 
             if endpoint_value:
-                logger.info(f"found endpoint with provider = {provider}")
+                logger.info(f"Found endpoint with provider = {provider.METHOD}")
                 return endpoint_value
 
         return None
+
+    def __deepcopy__(self, memo):
+        return CustomEndpointProviderChain(
+            self._session,
+            copy.deepcopy(self._service, memo),
+            copy.deepcopy(self._environ, memo)
+        )
