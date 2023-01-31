@@ -218,12 +218,6 @@ def create_botocore_default_config_mapping(session):
         ),
     )
 
-    # # TODO: How to do this for all services?
-    # for service_name in ['s3', 'kms', 'batch', 'elbv2', 'lexv2-runtime', 'appmesh']:
-    #     config_mapping[f'endpoint_url_{service_name}'] = \
-    #         CustomEndpointProviderChain(session=session,
-    #                                     service=service_name)
-
     return config_mapping
 
 
