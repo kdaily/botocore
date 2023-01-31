@@ -124,12 +124,6 @@ class ClientCreator:
         auth_token=None,
         profile=None,
     ):
-        logger.debug(f"profile: {profile}")
-        logger.debug((f"################### config store mapping: "
-                      f"{self._config_store._mapping.keys()}"))
-        logger.debug(f"####### config_file: {self._config_store.get_config_variable('config_file')}")
-        logger.debug(f"client config = {client_config}")
-        logger.debug(f"self.full_config = {self.full_config}")
         responses = self._event_emitter.emit(
             'choose-service-name', service_name=service_name
         )
@@ -166,7 +160,7 @@ class ClientCreator:
         )
 
         endpoint_url = self._get_custom_endpoint_url(
-            endpoint_url, service_name, service_model.service_id, profile)
+            endpoint_url, service_model, profile)
 
         client_args = self._get_client_args(
             service_model,
@@ -352,23 +346,20 @@ class ClientCreator:
         return copied_args
 
     def _get_custom_endpoint_url(
-        self, endpoint_url, service_name, service_id, profile):
+        self, endpoint_url, service_model, profile):
         if endpoint_url is not None:
-            logger.info(
-                (f"Already found an endpoint for "
-                 f"{service_name}: service id = {service_id}, endpoint = {endpoint_url}"))
             return endpoint_url
 
         self._config_store.set_config_provider(
-            f'endpoint_url_{service_name}',
+            f'endpoint_url_{service_model.service_name}',
             CustomEndpointProviderChain(full_config=self.full_config,
-                                        service=service_name,
+                                        service_id=service_model.service_id,
                                         profile_name=profile))
 
-        logger.info(f"Looking for env or shared config custom endpoint for service name {service_name}, service id ={service_id}.")
+        logger.info(f"Looking for env or shared config custom endpoint.")
 
         return self._config_store.get_config_variable(
-            f"endpoint_url_{service_name}")
+            f"endpoint_url_{service_model.service_name}")
 
     def _get_retry_mode(self, client, config_store):
         client_retries = client.meta.config.retries

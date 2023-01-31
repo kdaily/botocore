@@ -955,7 +955,7 @@ class CustomEndpointProviderChain:
     _GLOBAL_ENV_NAME = "AWS_ENDPOINT_URL"
     _VAR_NAME = 'endpoint_url'
 
-    def __init__(self, full_config, profile_name, service, environ=None):
+    def __init__(self, full_config, profile_name, service_id, environ=None):
         """Initialize a CustomEndpointProviderChain.
 
         :type session: :class:`botocore.session.Session`
@@ -968,10 +968,9 @@ class CustomEndpointProviderChain:
         """
         self._full_config = full_config
         self._profile_name = profile_name
-        self._service = service
-        self._service_id = utils.EVENT_ALIASES.get(service, service)
+        self._service_id = service_id
         self._transformed_service_id = \
-            self._service_id.replace("-", "_")
+            self._service_id.replace(" ", "_")
 
         self._service_env_var_name = \
             f"{self._GLOBAL_ENV_NAME}_{self._transformed_service_id.upper()}"
@@ -980,27 +979,31 @@ class CustomEndpointProviderChain:
             environ = os.environ
         self._environ = environ
 
+        self._service_config_provider = \
+            LinkedConfigProvider(
+                linked_section_name=self._LINKED_SECTION_NAME,
+                config_var_name=(self._transformed_service_id.lower(), self._VAR_NAME),
+                full_config=self._full_config,
+                profile_name=self._profile_name)
+        self._service_config_provider.METHOD = f"{self._service_config_provider.METHOD}-service"
+
         self._global_config_provider = \
             LinkedConfigProvider(
                 linked_section_name=self._LINKED_SECTION_NAME,
                 config_var_name=self._VAR_NAME,
                 full_config=self._full_config,
                 profile_name=self._profile_name)
+        self._global_config_provider.METHOD = f"{self._global_config_provider.METHOD}-global"
 
-        self._service_config_provider = \
-            LinkedConfigProvider(
-                linked_section_name=self._LINKED_SECTION_NAME,
-                config_var_name=(self._transformed_service_id, self._VAR_NAME),
-                full_config=self._full_config,
-                profile_name=self._profile_name)
+        self._service_env_provider = \
+            EnvironmentProvider(name=self._service_env_var_name,
+                                env=self._environ)
+        self._service_env_provider.METHOD = f"{self._service_env_provider.METHOD}-service"
 
         self._global_env_provider = \
             EnvironmentProvider(name=self._GLOBAL_ENV_NAME, 
                                 env=self._environ)
-        
-        self._service_env_provider = \
-            EnvironmentProvider(name=self._service_env_var_name, 
-                                env=self._environ)
+        self._global_env_provider.METHOD = f"{self._global_env_provider.METHOD}-global"
 
         self._providers = [
             self._service_env_provider,
@@ -1008,8 +1011,6 @@ class CustomEndpointProviderChain:
             self._service_config_provider,
             self._global_config_provider
         ]
-
-        logger.debug(f"Created {str(self)}")
 
     def provide(self):
 
@@ -1034,4 +1035,4 @@ class CustomEndpointProviderChain:
         )
 
     def __repr__(self):
-        return f"CustomEndpointProviderChain(service={self._service}, service_id={self._service_id})"
+        return f"CustomEndpointProviderChain(service_id={self._service_id})"
