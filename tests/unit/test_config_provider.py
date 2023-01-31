@@ -33,7 +33,7 @@ from botocore.configprovider import (
     CustomEndpointProviderChain,
 )
 from botocore.exceptions import ConnectTimeoutError
-from botocore.utils import IMDSRegionProvider
+from botocore.utils import IMDSRegionProvider, EVENT_ALIASES
 from tests import mock, unittest
 
 
@@ -651,13 +651,33 @@ class TestCustomEndpointProviderChain(unittest.TestCase):
             expected_value='global-from-config',
         )
 
-@pytest.mark.parametrize("service_name", ['batch'])
-def test_service_env_var_name_is_correct(service_name):
+
+SESSION = session.get_session()
+LOADER = SESSION.get_component('data_loader')
+AVAILABLE_SERVICES = LOADER.list_available_services('service-2')
+
+
+def _known_service_names_and_ids():
+    return set([
+        (service_name,
+         SESSION.get_service_model(service_name).service_id)
+        for service_name in AVAILABLE_SERVICES
+    ])
+
+
+@pytest.mark.parametrize("service_name,service_id",
+                         _known_service_names_and_ids())
+def test_service_env_var_name_is_correct(service_name, service_id):
     fake_session = mock.Mock(spec=session.Session)
     fake_session.get_config_variable.return_value = 'default'
+    service_name = EVENT_ALIASES.get(service_name, service_name)
+    service_name = service_name.replace("-", "_")
+
     chain = CustomEndpointProviderChain(
         session=fake_session, service=service_name, environ={})
-    assert chain._service_env_var_name == f"AWS_ENDPOINT_URL_{service_name.upper()}"
+    expected_env_var_name = \
+        f'AWS_ENDPOINT_URL_{service_id.upper().replace(" ", "_")}'
+    assert chain._service_env_var_name == expected_env_var_name
 
 def _make_provider_that_returns(return_value):
     provider = mock.Mock(spec=BaseProvider)
