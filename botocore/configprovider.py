@@ -218,11 +218,11 @@ def create_botocore_default_config_mapping(session):
         ),
     )
 
-    # TODO: How to do this for all services?
-    for service_name in ['s3', 'kms', 'batch', 'elbv2', 'lexv2-runtime', 'appmesh']:
-        config_mapping[f'endpoint_url_{service_name}'] = \
-            CustomEndpointProviderChain(session=session,
-                                        service=service_name)
+    # # TODO: How to do this for all services?
+    # for service_name in ['s3', 'kms', 'batch', 'elbv2', 'lexv2-runtime', 'appmesh']:
+    #     config_mapping[f'endpoint_url_{service_name}'] = \
+    #         CustomEndpointProviderChain(session=session,
+    #                                     service=service_name)
 
     return config_mapping
 
@@ -860,25 +860,25 @@ class LinkedSectionProvider(BaseProvider):
     that have their own set of config variables and resolving logic.
     """
 
-    def __init__(self, linked_section_name, session):
+    def __init__(self, linked_section_name, full_config, profile_name):
         self._linked_section_name = linked_section_name
-        self._session = session
+        self._full_config = full_config
+        self._profile_name = profile_name
 
     def __deepcopy__(self, memo):
         return LinkedSectionProvider(
             copy.deepcopy(self._linked_section_name, memo),
-            self._session
+            self._full_config
         )
 
     def provide(self):
-        loaded_config = self._session.full_config
+        loaded_config = self._full_config
         profiles = loaded_config.get("profiles", {})
         services = loaded_config.get(self._linked_section_name, {})
-        profile_name = self._session.get_config_variable("profile")
 
-        if not profile_name:
-            profile_name = "default"
-        profile_config = profiles.get(profile_name, {})
+        if not self._profile_name:
+            self._profile_name = "default"
+        profile_config = profiles.get(self._profile_name, {})
 
         if self._linked_section_name not in profile_config:
             return
@@ -905,7 +905,7 @@ class LinkedSectionProvider(BaseProvider):
 class LinkedConfigProvider(BaseProvider):
     METHOD = "section-config"
 
-    def __init__(self, linked_section_name, config_var_name, session):
+    def __init__(self, linked_section_name, config_var_name, full_config, profile_name):
         """Initialize LinkedConfigProvider.
 
         :type config_var_name: str or tuple
@@ -920,18 +920,20 @@ class LinkedConfigProvider(BaseProvider):
         """
         self._linked_section_name = linked_section_name
         self._config_var_name = config_var_name
-        self._session = session
+        self._full_config = full_config
+        self._profile_name = profile_name
 
         self._linked_section_provider = \
             LinkedSectionProvider(
                 linked_section_name=self._linked_section_name,
-                session=self._session)
+                full_config=self._full_config,
+                profile_name=self._profile_name)
 
     def __deepcopy__(self, memo):
         return LinkedConfigProvider(
             copy.deepcopy(self._linked_section_name),
             copy.deepcopy(self._config_var_name, memo),
-            self._session
+            self._full_config
         )
 
     def provide(self):
@@ -959,7 +961,7 @@ class CustomEndpointProviderChain:
     _GLOBAL_ENV_NAME = "AWS_ENDPOINT_URL"
     _VAR_NAME = 'endpoint_url'
 
-    def __init__(self, session, service, environ=None):
+    def __init__(self, full_config, profile_name, service, environ=None):
         """Initialize a CustomEndpointProviderChain.
 
         :type session: :class:`botocore.session.Session`
@@ -970,7 +972,8 @@ class CustomEndpointProviderChain:
         :param environ: A mapping to use for environment variables. If this
             is not provided it will default to use os.environ.
         """
-        self._session = session
+        self._full_config = full_config
+        self._profile_name = profile_name
         self._service = service
         self._service_id = utils.EVENT_ALIASES.get(service, service)
         self._transformed_service_id = \
@@ -987,13 +990,15 @@ class CustomEndpointProviderChain:
             LinkedConfigProvider(
                 linked_section_name=self._LINKED_SECTION_NAME,
                 config_var_name=self._VAR_NAME,
-                session=self._session)
+                full_config=self._full_config,
+                profile_name=self._profile_name)
 
         self._service_config_provider = \
             LinkedConfigProvider(
                 linked_section_name=self._LINKED_SECTION_NAME,
                 config_var_name=(self._transformed_service_id, self._VAR_NAME),
-                session=self._session)
+                full_config=self._full_config,
+                profile_name=self._profile_name)
 
         self._global_env_provider = \
             EnvironmentProvider(name=self._GLOBAL_ENV_NAME, 
@@ -1029,7 +1034,7 @@ class CustomEndpointProviderChain:
 
     def __deepcopy__(self, memo):
         return CustomEndpointProviderChain(
-            self._session,
+            self._full_config,
             copy.deepcopy(self._service, memo),
             copy.deepcopy(self._environ, memo)
         )

@@ -585,6 +585,7 @@ class TestCreateClient(BaseSessionTest):
             client_config=config,
             api_version=mock.ANY,
             auth_token=mock.ANY,
+            profile=mock.ANY,
         )
 
     @mock.patch('botocore.client.ClientCreator')
@@ -604,6 +605,7 @@ class TestCreateClient(BaseSessionTest):
             client_config=config,
             api_version=mock.ANY,
             auth_token=mock.ANY,
+            profile=mock.ANY,
         )
 
     @mock.patch('botocore.client.ClientCreator')

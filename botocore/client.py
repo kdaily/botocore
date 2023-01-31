@@ -12,6 +12,7 @@
 # language governing permissions and limitations under the License.
 import logging
 
+import botocore.configloader
 from botocore import waiter, xform_name
 from botocore.args import ClientArgsCreator
 from botocore.auth import AUTH_TYPE_MAPS
@@ -24,6 +25,7 @@ from botocore.discovery import (
 )
 from botocore.docs.docstring import ClientMethodDocstring, PaginatorDocstring
 from botocore.exceptions import (
+    ConfigNotFound,
     DataNotFoundError,
     InvalidEndpointDiscoveryConfigurationError,
     OperationNotPageableError,
@@ -60,6 +62,7 @@ from botocore.utils import S3EndpointSetter  # noqa
 from botocore.utils import S3RegionRedirector  # noqa
 from botocore import UNSIGNED  # noqa
 
+from botocore.configprovider import CustomEndpointProviderChain
 
 _LEGACY_SIGNATURE_VERSIONS = frozenset(
     (
@@ -105,6 +108,7 @@ class ClientCreator:
         # config and environment variables (and potentially more in the
         # future).
         self._config_store = config_store
+        self._config = None
 
     def create_client(
         self,
@@ -118,12 +122,20 @@ class ClientCreator:
         api_version=None,
         client_config=None,
         auth_token=None,
+        profile=None,
     ):
+        logger.debug(f"profile: {profile}")
+        logger.debug((f"################### config store mapping: "
+                      f"{self._config_store._mapping.keys()}"))
+        logger.debug(f"####### config_file: {self._config_store.get_config_variable('config_file')}")
+        logger.debug(f"client config = {client_config}")
+        logger.debug(f"self.full_config = {self.full_config}")
         responses = self._event_emitter.emit(
             'choose-service-name', service_name=service_name
         )
         service_name = first_non_none_response(responses, default=service_name)
         service_model = self._load_service_model(service_name, api_version)
+
         try:
             endpoints_ruleset_data = self._load_service_endpoints_ruleset(
                 service_name, api_version
@@ -154,7 +166,7 @@ class ClientCreator:
         )
 
         endpoint_url = self._get_custom_endpoint_url(
-            endpoint_url, service_name)
+            endpoint_url, service_name, service_model.service_id, profile)
 
         client_args = self._get_client_args(
             service_model,
@@ -184,6 +196,43 @@ class ClientCreator:
             service_client, endpoint_url, client_config
         )
         return service_client
+
+    # Copied from session.py
+    @property
+    def full_config(self):
+        """Return the parsed config file.
+
+        The ``get_config`` method returns the config associated with the
+        specified profile.  This property returns the contents of the
+        **entire** config file.
+
+        :rtype: dict
+        """
+        if self._config is None:
+            try:
+                config_file = self._config_store.get_config_variable('config_file')
+                self._config = botocore.configloader.load_config(config_file)
+            except ConfigNotFound:
+                self._config = {'profiles': {}}
+            try:
+                # Now we need to inject the profiles from the
+                # credentials file.  We don't actually need the values
+                # in the creds file, only the profile names so that we
+                # can validate the user is not referring to a nonexistent
+                # profile.
+                cred_file = self._config_store.get_config_variable('credentials_file')
+                cred_profiles = botocore.configloader.raw_config_parse(
+                    cred_file
+                )
+                for profile in cred_profiles:
+                    cred_vars = cred_profiles[profile]
+                    if profile not in self._config['profiles']:
+                        self._config['profiles'][profile] = cred_vars
+                    else:
+                        self._config['profiles'][profile].update(cred_vars)
+            except ConfigNotFound:
+                pass
+        return self._config
 
     def create_client_class(self, service_name, api_version=None):
         service_model = self._load_service_model(service_name, api_version)
@@ -303,10 +352,20 @@ class ClientCreator:
         return copied_args
 
     def _get_custom_endpoint_url(
-        self, endpoint_url, service_name):
+        self, endpoint_url, service_name, service_id, profile):
         if endpoint_url is not None:
-            logger.info(f"Already found an endpoint for {service_name} = {endpoint_url}")
+            logger.info(
+                (f"Already found an endpoint for "
+                 f"{service_name}: service id = {service_id}, endpoint = {endpoint_url}"))
             return endpoint_url
+
+        self._config_store.set_config_provider(
+            f'endpoint_url_{service_name}',
+            CustomEndpointProviderChain(full_config=self.full_config,
+                                        service=service_name,
+                                        profile_name=profile))
+
+        logger.info(f"Looking for env or shared config custom endpoint for service name {service_name}, service id ={service_id}.")
 
         return self._config_store.get_config_variable(
             f"endpoint_url_{service_name}")

@@ -488,13 +488,11 @@ class TestLinkedSectionConfigProvider(unittest.TestCase):
         linked_section_name,
         expected_value
     ):
-        fake_session = mock.Mock(spec=session.Session)
-        fake_session.full_config = config_file_values
-        fake_session.get_config_variable.return_value = "test"
 
         provider = LinkedSectionProvider(
+            full_config=config_file_values,
+            profile_name="test",
             linked_section_name=linked_section_name,
-            session=fake_session
         )
         value = provider.provide()
         self.assertEqual(value, expected_value)
@@ -551,12 +549,12 @@ class TestCustomEndpointProviderChain(unittest.TestCase):
         full_config_map,
         expected_value,
     ):
-        fake_session = mock.Mock(spec=session.Session)
-        fake_session.get_config_variable.return_value = 'default'
-        fake_session.full_config = full_config_map
-        fake_session.instance_variables.return_value = instance_map
+        # fake_session = mock.Mock(spec=session.Session)
+        # fake_session.get_config_variable.return_value = 'default'
+        # fake_session.full_config = full_config_map
+        # fake_session.instance_variables.return_value = instance_map
         chain = CustomEndpointProviderChain(
-            session=fake_session, service=service, environ=environ_map)
+            profile_name='default', full_config=full_config_map, service=service, environ=environ_map)
         value = chain.provide()
         self.assertEqual(value, expected_value)
 
@@ -668,13 +666,13 @@ def _known_service_names_and_ids():
 @pytest.mark.parametrize("service_name,service_id",
                          _known_service_names_and_ids())
 def test_service_env_var_name_is_correct(service_name, service_id):
-    fake_session = mock.Mock(spec=session.Session)
-    fake_session.get_config_variable.return_value = 'default'
+    # fake_session = mock.Mock(spec=session.Session)
+    # fake_session.get_config_variable.return_value = 'default'
     service_name = EVENT_ALIASES.get(service_name, service_name)
     service_name = service_name.replace("-", "_")
 
     chain = CustomEndpointProviderChain(
-        session=fake_session, service=service_name, environ={})
+        full_config={}, profile_name='default', service=service_name, environ={})
     expected_env_var_name = \
         f'AWS_ENDPOINT_URL_{service_id.upper().replace(" ", "_")}'
     assert chain._service_env_var_name == expected_env_var_name
