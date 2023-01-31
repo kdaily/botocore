@@ -972,8 +972,12 @@ class CustomEndpointProviderChain:
         """
         self._session = session
         self._service = service
+        self._service_id = utils.EVENT_ALIASES.get(service, service)
+        self._transformed_service_id = \
+            self._service_id.replace("-", "_")
+
         self._service_env_var_name = \
-        f"{self._GLOBAL_ENV_NAME}_{self._service.upper()}"
+            f"{self._GLOBAL_ENV_NAME}_{self._transformed_service_id.upper()}"
 
         if environ is None:
             environ = os.environ
@@ -988,7 +992,7 @@ class CustomEndpointProviderChain:
         self._service_config_provider = \
             LinkedConfigProvider(
                 linked_section_name=self._LINKED_SECTION_NAME,
-                config_var_name=(self._service, self._VAR_NAME),
+                config_var_name=(self._transformed_service_id, self._VAR_NAME),
                 session=self._session)
 
         self._global_env_provider = \
@@ -1006,6 +1010,8 @@ class CustomEndpointProviderChain:
             self._global_config_provider
         ]
 
+        logger.debug(f"Created {str(self)}")
+
     def provide(self):
 
         for provider in self._providers:
@@ -1018,6 +1024,7 @@ class CustomEndpointProviderChain:
                 logger.info(f"Found endpoint with provider = {provider.METHOD}")
                 return endpoint_value
 
+        logger.info(f"No custom endpoint found with {self}.")
         return None
 
     def __deepcopy__(self, memo):
@@ -1026,3 +1033,6 @@ class CustomEndpointProviderChain:
             copy.deepcopy(self._service, memo),
             copy.deepcopy(self._environ, memo)
         )
+
+    def __repr__(self):
+        return f"CustomEndpointProviderChain(service={self._service}, service_id={self._service_id})"
