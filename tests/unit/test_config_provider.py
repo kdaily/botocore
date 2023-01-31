@@ -554,7 +554,7 @@ class TestCustomEndpointProviderChain(unittest.TestCase):
         # fake_session.full_config = full_config_map
         # fake_session.instance_variables.return_value = instance_map
         chain = CustomEndpointProviderChain(
-            profile_name='default', full_config=full_config_map, service=service, environ=environ_map)
+            profile_name='default', full_config=full_config_map, service_id=service, environ=environ_map)
         value = chain.provide()
         self.assertEqual(value, expected_value)
 
@@ -668,11 +668,9 @@ def _known_service_names_and_ids():
 def test_service_env_var_name_is_correct(service_name, service_id):
     # fake_session = mock.Mock(spec=session.Session)
     # fake_session.get_config_variable.return_value = 'default'
-    service_name = EVENT_ALIASES.get(service_name, service_name)
-    service_name = service_name.replace("-", "_")
 
     chain = CustomEndpointProviderChain(
-        full_config={}, profile_name='default', service=service_name, environ={})
+        full_config={}, profile_name='default', service_id=service_id, environ={})
     expected_env_var_name = \
         f'AWS_ENDPOINT_URL_{service_id.upper().replace(" ", "_")}'
     assert chain._service_env_var_name == expected_env_var_name
