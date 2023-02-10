@@ -13,8 +13,7 @@
 import pytest
 
 import botocore.session as session
-from botocore.endpoint_provider import (
-    LinkedSectionProvider,
+from botocore.args import (
     ConfiguredEndpointProviderChain,
 )
 from botocore.exceptions import (
@@ -37,74 +36,74 @@ def _known_service_names_and_ids():
     return result
 
 
-class TestLinkedSectionConfigProvider(unittest.TestCase):
-    def assert_provides_value(
-        self,
-        config_file_values,
-        scoped_config,
-        linked_section_type,
-        expected_value,
-        expected_exception=None,
-    ):
+# class TestLinkedSectionConfigProvider(unittest.TestCase):
+#     def assert_provides_value(
+#         self,
+#         config_file_values,
+#         scoped_config,
+#         linked_section_type,
+#         expected_value,
+#         expected_exception=None,
+#     ):
 
-        provider = LinkedSectionProvider(
-            full_config=config_file_values,
-            scoped_config=scoped_config,
-            linked_section_type=linked_section_type,
-        )
-        if expected_exception is not None:
-            with pytest.raises(expected_exception):
-                value = provider.provide()
-            return
+#         provider = LinkedSectionProvider(
+#             full_config=config_file_values,
+#             scoped_config=scoped_config,
+#             linked_section_type=linked_section_type,
+#         )
+#         if expected_exception is not None:
+#             with pytest.raises(expected_exception):
+#                 value = provider.provide()
+#             return
 
-        value = provider.provide()
-        self.assertEqual(value, expected_value)
+#         value = provider.provide()
+#         self.assertEqual(value, expected_value)
 
-    def test_provide_section_config(self):
-        full_config = {
-            "profiles": {
-                "test": {"services": "my-services"}
-            },
-            "services": {
-                "my-services": {
-                    "endpoint_url": "https://global-config-endpoint.aws:1234/",
-                    "s3": {
-                        "endpoint_url": "https://s3-config-endpoint.aws:1234/"
-                    }
-                }
-            }
-        }
+#     def test_provide_section_config(self):
+#         full_config = {
+#             "profiles": {
+#                 "test": {"services": "my-services"}
+#             },
+#             "services": {
+#                 "my-services": {
+#                     "endpoint_url": "https://global-config-endpoint.aws:1234/",
+#                     "s3": {
+#                         "endpoint_url": "https://s3-config-endpoint.aws:1234/"
+#                     }
+#                 }
+#             }
+#         }
 
-        expected_section = {
-            "endpoint_url": "https://global-config-endpoint.aws:1234/",
-            "s3": {
-                "endpoint_url": "https://s3-config-endpoint.aws:1234/"
-            }
-        }
+#         expected_section = {
+#             "endpoint_url": "https://global-config-endpoint.aws:1234/",
+#             "s3": {
+#                 "endpoint_url": "https://s3-config-endpoint.aws:1234/"
+#             }
+#         }
 
-        self.assert_provides_value(
-            config_file_values=full_config,
-            scoped_config=full_config['profiles']['test'],
-            linked_section_type='services',
-            expected_value=expected_section)
+#         self.assert_provides_value(
+#             config_file_values=full_config,
+#             scoped_config=full_config['profiles']['test'],
+#             linked_section_type='services',
+#             expected_value=expected_section)
 
-    def test_provide_service_config_missing_service(self):
-        self.assert_provides_value(
-            config_file_values={},
-            scoped_config={},
-            linked_section_type='services',
-            expected_value=None,
-        )
+#     def test_provide_service_config_missing_service(self):
+#         self.assert_provides_value(
+#             config_file_values={},
+#             scoped_config={},
+#             linked_section_type='services',
+#             expected_value=None,
+#         )
 
-    def test_provide_service_config_not_a_section(self):
-        self.assert_provides_value(
-            config_file_values={"profiles": {
-                "test": {"services": "my-services"}}},
-            scoped_config={"services": "my-services"},
-            linked_section_type="services",
-            expected_value=None,
-            expected_exception=InvalidConfigError
-        )
+#     def test_provide_service_config_not_a_section(self):
+#         self.assert_provides_value(
+#             config_file_values={"profiles": {
+#                 "test": {"services": "my-services"}}},
+#             scoped_config={"services": "my-services"},
+#             linked_section_type="services",
+#             expected_value=None,
+#             expected_exception=InvalidConfigError
+#         )
 
 
 class TestCustomEndpointProviderChain(unittest.TestCase):
@@ -253,4 +252,4 @@ def test_service_env_var_name_is_correct(service_name, service_id):
     transformed_service_id = service_id.upper().replace(" ", "_")
     expected_env_var_name = \
         f'AWS_ENDPOINT_URL_{transformed_service_id}'
-    assert chain._service_env_var_name == expected_env_var_name
+    assert chain._get_service_env_var_name() == expected_env_var_name

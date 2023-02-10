@@ -1,14 +1,16 @@
 import json
-import os
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from pytest import fixture
 
+from botocore.compat import urlsplit
 import botocore.configprovider
-from tests import temporary_file
-
+from tests import (
+    temporary_file,
+    ClientHTTPStubber,
+)
 ENDPOINT_TESTDATA_FILE = Path(__file__).parent / 'data' / "profile-tests.json"
 
 with open(ENDPOINT_TESTDATA_FILE) as f:
@@ -64,35 +66,51 @@ def mock_botocore_session():
     return botocore.session.get_session()
 
 
+def assert_endpoint(request, expected_endpoint):
+    split_endpoint = urlsplit(request.url)
+    print(split_endpoint)
+    actual_endpoint = f"{split_endpoint.scheme}://{split_endpoint.netloc}"
+    # if split_endpoint.path[0] == "/":
+    #     actual_endpoint += split_endpoint.path[0]
+    assert actual_endpoint == expected_endpoint
 
 @parametrize_test_cases(ENDPOINT_TEST_CASES)
 @pytest.mark.parametrize("client_config", [True, False])
 def test_resolve_custom_endpoint_url(
-    test_case, client_config, mock_botocore_session):
-    environment = test_case.get('environment', {})
+    test_case,
+    client_config,
+    mock_botocore_session):
+        environment = test_case.get('environment', {})
 
-    # need to update the environment with the path to
-    # the temp config file
-    with temporary_file('w') as f, \
-        mock.patch.dict(
-            botocore.configprovider.os.environ,
-            dict(**environment, **{"AWS_CONFIG_FILE": f.name}),
-            clear=True) as mockenv:
+        # need to update the environment with the path to
+        # the temp config file
+        with temporary_file('w') as f, \
+            mock.patch.dict(
+                botocore.configprovider.os.environ,
+                dict(**environment, **{"AWS_CONFIG_FILE": f.name}),
+                clear=True) as mockenv:
 
-        f.write(test_case['profile_string'])
-        f.flush()
+            f.write(test_case['profile_string'])
+            f.flush()
 
-        mock_botocore_session.set_config_variable(
-            'profile', test_case['profile']
-        )
+            mock_botocore_session.set_config_variable(
+                'profile', test_case['profile']
+            )
 
-        if client_config:
-            output_url = "https://clientconfig.endpoint.aws/"
-            client = mock_botocore_session.create_client(
-                test_case['service'], endpoint_url=output_url)
-        else:
-            client = mock_botocore_session.create_client(
-                test_case['service'])
-            output_url = test_case['output']['endpointUrl']
+            if client_config:
+                output_url = "https://clientconfig.endpoint.aws"
+                client = mock_botocore_session.create_client(
+                    test_case['service'], endpoint_url=output_url)
+            else:
+                client = mock_botocore_session.create_client(
+                    test_case['service'])
+                output_url = test_case['output']['endpointUrl']
 
-        assert client.meta.endpoint_url == output_url
+            http_stubber = ClientHTTPStubber(client)
+            http_stubber.start()
+
+            assert client.meta.endpoint_url == output_url
+
+            http_stubber.add_response()
+            client.list_objects(Bucket="foo")
+            assert_endpoint(http_stubber.requests[0], output_url)
