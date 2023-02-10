@@ -63,26 +63,39 @@
       "profiles": {
         "default": {
           "aws_access_key_id": "123",
-          "aws_secret_access_key": "456"
+          "aws_secret_access_key": "456",
+          "region": "us-woohoo-2"
+        },
+        "service_localhost_global_only": {
+          "aws_access_key_id": "123",
+          "aws_secret_access_key": "456",
+          "services": "localhost_global_only",
+          "region": "us-woohoo-2"
         },
         "service_global_only": {
           "aws_access_key_id": "123",
           "aws_secret_access_key": "456",
-          "services": "global_only"
+          "services": "global_only",
+          "region": "us-woohoo-2"
         },
         "service_specific_s3": {
           "aws_access_key_id": "123",
           "aws_secret_access_key": "456",
-          "services": "service_specific_s3"
+          "services": "service_specific_s3",
+          "region": "us-woohoo-2"
         },
         "global_and_service_specific_s3": {
           "aws_access_key_id": "123",
           "aws_secret_access_key": "456",
-          "services": "global_and_service_specific_s3"
+          "services": "global_and_service_specific_s3",
+          "region": "us-woohoo-2"
         }
       },
 
       "services": {
+        "localhost_global_only": {
+          "endpoint_url": "http://localhost:1234"
+        },
         "global_only": {
           "endpoint_url": "https://global.endpoint.aws"
         },
@@ -106,7 +119,15 @@
 
     "endpointUrlTests": [
       {
-        "name": "Global endpoint url is read from services section and used for an S3 client.",
+        "name": "Global endpoint url using localhost is read from services section and used for an s3 client.",
+        "profile": "service_localhost_global_only",
+        "service": "s3",
+        "output": {
+          "endpointUrl": "http://localhost:1234"
+        }
+      },
+      {
+        "name": "Global endpoint url is read from services section and used for an s3 client.",
         "profile": "service_global_only",
         "service": "s3",
         "output": {
@@ -114,7 +135,7 @@
         }
       },
       {
-        "name": "Service specific endpoint url is read from services section and used for an S3 client.",
+        "name": "Service specific endpoint url is read from services section and used for an s3 client.",
         "profile": "service_specific_s3",
         "service": "s3",
         "output": {
@@ -122,7 +143,7 @@
         }
       },
       {
-        "name": "S3 Service-specific endpoint URL from configuration file takes precedence over global endpoint URL from configuration file.",
+        "name": "s3 Service-specific endpoint URL from configuration file takes precedence over global endpoint URL from configuration file.",
         "profile": "global_and_service_specific_s3",
         "service": "s3",
         "output": {
