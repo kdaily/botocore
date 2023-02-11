@@ -200,6 +200,17 @@ def _parse_nested(config_value):
     return parsed
 
 
+def _parse_section(key, values):
+    result = {}
+    try:
+        parts = shlex.split(key)
+    except ValueError:
+        return result
+    if len(parts) == 2:
+        result[parts[1]] = values
+    return result
+
+
 def build_profile_map(parsed_ini_config):
     """Convert the parsed INI config into a profile map.
 
@@ -258,26 +269,11 @@ def build_profile_map(parsed_ini_config):
     final_config = {}
     for key, values in parsed_config.items():
         if key.startswith("profile"):
-            try:
-                parts = shlex.split(key)
-            except ValueError:
-                continue
-            if len(parts) == 2:
-                profiles[parts[1]] = values
+            profiles.update(_parse_section(key, values))
         elif key.startswith("sso-session"):
-            try:
-                parts = shlex.split(key)
-            except ValueError:
-                continue
-            if len(parts) == 2:
-                sso_sessions[parts[1]] = values
+            sso_sessions.update(_parse_section(key, values))
         elif key.startswith("services"):
-            try:
-                parts = shlex.split(key)
-            except ValueError:
-                continue
-            if len(parts) == 2:
-                services[parts[1]] = values
+            services.update(_parse_section(key, values))
         elif key == 'default':
             # default section is special and is considered a profile
             # name but we don't require you use 'profile "default"'
