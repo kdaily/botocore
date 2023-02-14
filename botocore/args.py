@@ -114,7 +114,7 @@ class ClientArgsCreator:
         s3_config = final_args['s3_config']
         partition = endpoint_config['metadata'].get('partition', None)
         socket_options = final_args['socket_options']
-        given_endpoint_url = final_args['given_endpoint_url']
+        configured_endpoint_url = final_args['configured_endpoint_url']
         signing_region = endpoint_config['signing_region']
         endpoint_region_name = endpoint_config['region_name']
 
@@ -158,7 +158,7 @@ class ClientArgsCreator:
             service_model,
             endpoint_region_name,
             region_name,
-            given_endpoint_url,
+            configured_endpoint_url,
             endpoint,
             is_secure,
             endpoint_bridge,
@@ -208,15 +208,20 @@ class ClientArgsCreator:
             if client_config.user_agent_extra is not None:
                 user_agent += ' %s' % client_config.user_agent_extra
 
-        s3_config = self.compute_s3_config(client_config)
+        configured_endpoint_url = self._compute_configured_endpoint_url(
+            client_config,
+            endpoint_url,
+            scoped_config,
+            full_config,
+            service_model,
+        )
 
-        endpoint_url = self._compute_configured_endpoint_url(
-            endpoint_url, scoped_config, full_config, service_model)
+        s3_config = self.compute_s3_config(client_config)
 
         endpoint_config = self._compute_endpoint_config(
             service_name=service_name,
             region_name=region_name,
-            endpoint_url=endpoint_url,
+            endpoint_url=configured_endpoint_url,
             is_secure=is_secure,
             endpoint_bridge=endpoint_bridge,
             s3_config=s3_config,
@@ -261,7 +266,7 @@ class ClientArgsCreator:
             'service_name': service_name,
             'parameter_validation': parameter_validation,
             'user_agent': user_agent,
-            'given_endpoint_url': endpoint_url,
+            'configured_endpoint_url': configured_endpoint_url,
             'endpoint_config': endpoint_config,
             'protocol': protocol,
             'config_kwargs': config_kwargs,
@@ -273,18 +278,42 @@ class ClientArgsCreator:
 
     def _compute_configured_endpoint_url(
         self,
+        client_config,
         endpoint_url,
         scoped_config,
         full_config,
-        service_model
+        service_model,
     ):
-        if endpoint_url is not None:
+
+        if (
+            endpoint_url is not None
+            or not self.compute_use_config_endpoint_urls(client_config)
+        ):
             return endpoint_url
+
         chain = ConfiguredEndpointProviderChain(
-            full_config=full_config, scoped_config=scoped_config,
-            service_model=service_model)
+            full_config=full_config,
+            scoped_config=scoped_config,
+            service_model=service_model,
+        )
         endpoint = chain.provide()
         return endpoint
+
+    def compute_use_config_endpoint_urls(self, client_config):
+        if (
+            client_config
+            and client_config.use_config_endpoint_urls is not None
+        ):
+            return client_config.use_config_endpoint_urls
+
+        use_config_endpoint_urls = self._config_store.get_config_variable(
+            'use_config_endpoint_urls'
+        )
+
+        if use_config_endpoint_urls is not None:
+            return use_config_endpoint_urls
+
+        return True
 
     def compute_s3_config(self, client_config):
         s3_configuration = self._config_store.get_config_variable('s3')
@@ -684,11 +713,7 @@ class ConfiguredEndpointProviderChain:
     ]
 
     def __init__(
-        self,
-        full_config,
-        scoped_config,
-        service_model,
-        environ=None
+        self, full_config, scoped_config, service_model, environ=None
     ):
         """Initialize a ConfiguredEndpointProviderChain.
 
@@ -716,55 +741,46 @@ class ConfiguredEndpointProviderChain:
             environ = os.environ
         self._environ = environ
 
-    @property
-    def _service_id(self):
-        return self._service_model.service_id
-
-    @property
-    def _service_name(self):
-        return self._service_model.service_name
-
     def provide(self):
         for location in self._ENDPOINT_URL_LOOKUP_ORDER:
             logger.debug(
                 "Looking for endpoint for %s via: %s",
-                self._service_name, location)
+                self._service_model.service_name,
+                location,
+            )
 
-            provider_fxn = getattr(
-                self, f"_get_endpoint_url_{location}")
+            endpoint_url = getattr(self, f"_get_endpoint_url_{location}")()
 
-            endpoint_value = provider_fxn()
-
-            if endpoint_value:
+            if endpoint_url:
                 logger.info(
                     "Found endpoint for %s via: %s.",
-                    self._service_name, location)
-                return endpoint_value
+                    self._service_model.service_name,
+                    location,
+                )
+                return endpoint_url
 
         logger.debug("No configured endpoint found.")
         return None
 
     def _get_endpoint_url_environment_service(self):
-        service_env_var_name = \
-            self._get_service_env_var_name()
-        provider = EnvironmentProvider(
-            name=service_env_var_name,
-            env=self._environ)
-        return provider.provide()
+        return EnvironmentProvider(
+            name=self._get_service_env_var_name(), env=self._environ
+        ).provide()
 
     def _get_endpoint_url_environment_global(self):
-        provider = EnvironmentProvider(
-            name="AWS_ENDPOINT_URL",
-            env=self._environ)
-        return provider.provide()
+        return EnvironmentProvider(
+            name="AWS_ENDPOINT_URL", env=self._environ
+        ).provide()
 
     def _get_endpoint_url_config_service(self):
-        transformed_service_id = \
-            self._snakecase_service_id(self._service_id).lower()
-        services_section = self._get_services_config()
-        service_specific_section = services_section.get(
-            transformed_service_id, {})
-        return service_specific_section.get("endpoint_url", None)
+        snakecase_service_id = self._snakecase_service_id(
+            self._service_model.service_id
+        ).lower()
+        return (
+            self._get_services_config()
+            .get(snakecase_service_id, {})
+            .get('endpoint_url', None)
+        )
 
     def _get_endpoint_url_config_global(self):
         return self._scoped_config.get("endpoint_url", None)
@@ -773,34 +789,21 @@ class ConfiguredEndpointProviderChain:
         return service_id.replace(" ", "_")
 
     def _get_service_env_var_name(self):
-        transformed_service_id_env = \
-            self._snakecase_service_id(self._service_id).upper()
-        service_env_var_name = \
-            f"AWS_ENDPOINT_URL_{transformed_service_id_env}"
-        return service_env_var_name
+        transformed_service_id_env = self._snakecase_service_id(
+            self._service_model.service_id
+        ).upper()
+        return f"AWS_ENDPOINT_URL_{transformed_service_id_env}"
 
     def _get_services_config(self):
-        """Provides a dictionary from a section linked in the scoped config.
-
-        If the configuration file looks like:
-
-        [profile test]
-        services = my-service
-
-        [services my-service]
-        a = 1
-
-        The linked section type would be 'services'. Calling the provide function
-        would return `{'a': 1}`.
-        """
         if "services" not in self._scoped_config:
             return {}
 
         section_name = self._scoped_config["services"]
-        services_section = self._full_config.get("services", {})
-        linked_section = services_section.get(section_name, {})
+        services_section = self._full_config.get("services", {}).get(
+            section_name
+        )
 
-        if not linked_section:
+        if not services_section:
             error_msg = (
                 f'The profile is configured to use the services '
                 f'section but the "{section_name}" services '
@@ -808,4 +811,4 @@ class ConfiguredEndpointProviderChain:
             )
             raise InvalidConfigError(error_msg=error_msg)
 
-        return linked_section
+        return services_section

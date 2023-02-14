@@ -108,6 +108,12 @@ BOTOCORE_DEFAUT_SESSION_VARIABLES = {
         None,
         utils.ensure_boolean,
     ),
+    'use_config_endpoint_urls': (
+        None,
+        'AWS_USE_CONFIG_ENDPOINT_URLS',
+        None,
+        utils.ensure_boolean,
+    ),
     'parameter_validation': ('parameter_validation', None, True, None),
     # Client side monitoring configurations.
     # Note: These configurations are considered internal to botocore.
