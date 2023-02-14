@@ -189,7 +189,7 @@ class Config:
         of endpoint URLs provided via environment variables and
         the shared configuration file.
 
-        Defaults to True.
+        Defaults to None.
 
     :type tcp_keepalive: bool
     :param tcp_keepalive: Enables the TCP Keep-Alive socket option used when
@@ -217,7 +217,7 @@ class Config:
             ('endpoint_discovery_enabled', None),
             ('use_dualstack_endpoint', None),
             ('use_fips_endpoint', None),
-            ('use_config_endpoint_urls', True),
+            ('use_config_endpoint_urls', None),
             ('defaults_mode', None),
             ('tcp_keepalive', None),
         ]

@@ -97,6 +97,10 @@ def test_resolve_custom_endpoint_url(
                 'profile', test_case['profile']
             )
 
+            mock_botocore_session.set_config_variable(
+                'use_config_endpoint_urls', True
+            )
+
             if client_config:
                 output_url = "https://clientconfig.endpoint.aws"
                 client = mock_botocore_session.create_client(
