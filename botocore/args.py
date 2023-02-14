@@ -208,10 +208,16 @@ class ClientArgsCreator:
             if client_config.user_agent_extra is not None:
                 user_agent += ' %s' % client_config.user_agent_extra
 
-        s3_config = self.compute_s3_config(client_config)
+        use_config_endpoint_urls = \
+            self.compute_use_config_endpoint_urls(client_config)
+        if use_config_endpoint_urls:
+            logger.debug("Using configured endpoint urls enabled.")
+            endpoint_url = self._compute_configured_endpoint_url(
+                endpoint_url, scoped_config, full_config, service_model)
+        else:
+            logger.debug("Using configured endpoint urls not enabled.")
 
-        endpoint_url = self._compute_configured_endpoint_url(
-            endpoint_url, scoped_config, full_config, service_model)
+        s3_config = self.compute_s3_config(client_config)
 
         endpoint_config = self._compute_endpoint_config(
             service_name=service_name,
@@ -285,6 +291,20 @@ class ClientArgsCreator:
             service_model=service_model)
         endpoint = chain.provide()
         return endpoint
+
+    def compute_use_config_endpoint_urls(self, client_config):
+        use_config_endpoint_urls = \
+            self._config_store.get_config_variable('use_config_endpoint_urls')
+
+        # Next specific client config values takes precedence over
+        # specific values in the config store.
+        if client_config is not None:
+            if client_config.use_config_endpoint_urls is not None:
+                if use_config_endpoint_urls is None:
+                    use_config_endpoint_urls = \
+                        client_config.use_config_endpoint_urls
+
+        return use_config_endpoint_urls
 
     def compute_s3_config(self, client_config):
         s3_configuration = self._config_store.get_config_variable('s3')
