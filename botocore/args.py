@@ -115,7 +115,6 @@ class ClientArgsCreator:
         partition = endpoint_config['metadata'].get('partition', None)
         socket_options = final_args['socket_options']
         given_endpoint_url = final_args['given_endpoint_url']
-        logger.debug("given_endpoint_url: %s, endpoint_config url: %s", given_endpoint_url, endpoint_config['endpoint_url'])
         signing_region = endpoint_config['signing_region']
         endpoint_region_name = endpoint_config['region_name']
 
@@ -676,96 +675,22 @@ class ClientArgsCreator:
         }
 
 
-class LinkedConfigProvider:
-    METHOD = "configfile"
-
-    def __init__(self, linked_section_type, config_var_name, full_config, scoped_config):
-        """Initialize LinkedConfigProvider.
-
-        :type linked_section_type: str
-        :param linked_section_type: The type of the section linked from the
-            profile. Common examples here are 'sso-session' and 'services'.
-
-        :type config_var_name: str or tuple
-        :param config_var_name: The name of the config variable to load from
-            the configuration file. If the value is a tuple, it must only
-            consist of two items, where the first item represents the section
-            and the second item represents the config var name in the section.
-
-        :type full_config: dict
-        :param full_config: The mapping of the full shared configuration file.
-
-        :type scoped_config: dict
-        :param scoped_config: The mapping of the configuration file for a
-            single profile.
-
-        """
-        self._linked_section_type = linked_section_type
-        self._config_var_name = config_var_name
-        self._full_config = full_config
-        self._scoped_config = scoped_config
-
-        self._linked_section = self._get_linked_section()
-
-    def provide(self):
-        """Provide a value from a config file property."""
-        scoped_config = self._linked_section
-        logger.debug(
-            "Looking in scoped_config %s for %s",
-            scoped_config, self._config_var_name)
-
-        if not isinstance(scoped_config, dict):
-            return None
-        if isinstance(self._config_var_name, tuple):
-            section_config = scoped_config.get(self._config_var_name[0])
-            if not isinstance(section_config, dict):
-                return None
-            return section_config.get(self._config_var_name[1])
-
-        return scoped_config.get(self._config_var_name)
-
-    def _get_linked_section(self):
-        """Provides a dictionary from a section linked in the scoped config.
-
-        If the configuration file looks like:
-
-        [profile test]
-        services = my-service
-
-        [services my-service]
-        a = 1
-
-        The linked section type would be 'services'. Calling the provide function
-        would return `{'a': 1}`.
-        """
-        if self._linked_section_type not in self._scoped_config:
-            return
-
-        linked_section_value = self._scoped_config.get(self._linked_section_type, {})
-
-        linked_section = self._full_config.get(self._linked_section_type, {})
-
-        linked_section_config = linked_section.get(linked_section_value, None)
-        if not linked_section_config:
-            error_msg = (
-                f'The profile is configured to use the {self._linked_section_type} '
-                f'section but the "{linked_section_value}" {self._linked_section_type} '
-                f"configuration does not exist."
-            )
-            raise InvalidConfigError(error_msg=error_msg)
-
-        return linked_section_config
-
-    def __repr__(self):
-        return 'LinkedConfigProvider(linked_section_type={}, config_var_name={})'.format(
-            self._linked_section_type,
-            self._config_var_name
-        )
-
-
 class ConfiguredEndpointProviderChain:
-    def __init__(self, full_config, scoped_config, service_model, environ=None):
-        """Initialize a CustomEndpointProviderChain.
+    _ENDPOINT_URL_LOOKUP_ORDER = [
+        "environment_service",
+        "environment_global",
+        "config_service",
+        "config_global",
+    ]
+
+    def __init__(
+        self,
+        full_config,
+        scoped_config,
+        service_model,
+        environ=None
+    ):
+        """Initialize a ConfiguredEndpointProviderChain.
 
         :type full_config: dict
         :param full_config: This is the dict representing the full
@@ -783,101 +708,104 @@ class ConfiguredEndpointProviderChain:
         :param environ: A mapping to use for environment variables. If this
             is not provided it will default to use os.environ.
         """
-        if full_config is None:
-            full_config = {}
-
         self._full_config = full_config
-
-        if scoped_config is None:
-            scoped_config = {}
-
         self._scoped_config = scoped_config
-
         self._service_model = service_model
-        self._service_id = self._service_model.service_id
-        self._service_name = self._service_model.service_name
 
         if environ is None:
             environ = os.environ
         self._environ = environ
 
-        self._providers = self._make_provider_chain()
+    @property
+    def _service_id(self):
+        return self._service_model.service_id
 
-    def _transform_service_id_env(self, service_id):
-        return service_id.upper().replace(" ", "_")
-
-    def _transform_service_id_config(self, service_id):
-        return service_id.lower().replace(" ", "_")
-
-    def _get_config_service_endpoint_url(self):
-        transformed_service_id_config = \
-            self._transform_service_id_config(self._service_id)
-        provider = LinkedConfigProvider(
-            linked_section_type="services",
-            config_var_name=(transformed_service_id_config, "endpoint_url"),
-            full_config=self._full_config,
-            scoped_config=self._scoped_config)
-        provider.METHOD = \
-            f"{provider.METHOD}-service"
-        return provider
-
-    def _get_config_global_endpoint_url(self):
-        provider = LinkedConfigProvider(
-            linked_section_type="services",
-            config_var_name="endpoint_url",
-            full_config=self._full_config,
-            scoped_config=self._scoped_config)
-        provider.METHOD = f"{provider.METHOD}-global"
-        return provider
-
-    def _get_service_env_var_name(self):
-        transformed_service_id_env = \
-            self._transform_service_id_env(self._service_id)
-        service_env_var_name = \
-            f"AWS_ENDPOINT_URL_{transformed_service_id_env}"
-        return service_env_var_name
-
-    def _get_env_service_endpoint_url(self):
-        service_env_var_name = self._get_service_env_var_name()
-        provider = EnvironmentProvider(
-            name=service_env_var_name,
-            env=self._environ)
-        provider.METHOD = "environment_variable-service"
-        return provider
-
-    def _get_env_global_endpoint_url(self):
-        provider = EnvironmentProvider(
-            name="AWS_ENDPOINT_URL",
-            env=self._environ)
-        provider.METHOD = "environment_variable-global"
-        return provider
-
-    def _make_provider_chain(self):
-        providers = [
-            self._get_env_service_endpoint_url(),
-            self._get_env_global_endpoint_url(),
-            self._get_config_service_endpoint_url(),
-            self._get_config_global_endpoint_url(),
-        ]
-        return providers
+    @property
+    def _service_name(self):
+        return self._service_model.service_name
 
     def provide(self):
-        for provider in self._providers:
+        for location in self._ENDPOINT_URL_LOOKUP_ORDER:
             logger.debug(
                 "Looking for endpoint for %s via: %s",
-                self._service_name, provider.METHOD)
+                self._service_name, location)
 
-            endpoint_value = \
-                provider.provide()
+            provider_fxn = getattr(
+                self, f"_get_endpoint_url_{location}")
+
+            endpoint_value = provider_fxn()
 
             if endpoint_value:
                 logger.info(
                     "Found endpoint for %s via: %s.",
-                    self._service_name, provider.METHOD)
+                    self._service_name, location)
                 return endpoint_value
 
-        logger.debug(f"No custom endpoint found with {self}.")
+        logger.debug("No configured endpoint found.")
         return None
 
-    def __repr__(self):
-        return f"CustomEndpointProviderChain(service_name={self._service_name})"
+    def _get_endpoint_url_environment_service(self):
+        service_env_var_name = \
+            self._get_service_env_var_name()
+        provider = EnvironmentProvider(
+            name=service_env_var_name,
+            env=self._environ)
+        return provider.provide()
+
+    def _get_endpoint_url_environment_global(self):
+        provider = EnvironmentProvider(
+            name="AWS_ENDPOINT_URL",
+            env=self._environ)
+        return provider.provide()
+
+    def _get_endpoint_url_config_service(self):
+        transformed_service_id = \
+            self._snakecase_service_id(self._service_id).lower()
+        services_section = self._get_services_config()
+        service_specific_section = services_section.get(
+            transformed_service_id, {})
+        return service_specific_section.get("endpoint_url", None)
+
+    def _get_endpoint_url_config_global(self):
+        return self._scoped_config.get("endpoint_url", None)
+
+    def _snakecase_service_id(self, service_id):
+        return service_id.replace(" ", "_")
+
+    def _get_service_env_var_name(self):
+        transformed_service_id_env = \
+            self._snakecase_service_id(self._service_id).upper()
+        service_env_var_name = \
+            f"AWS_ENDPOINT_URL_{transformed_service_id_env}"
+        return service_env_var_name
+
+    def _get_services_config(self):
+        """Provides a dictionary from a section linked in the scoped config.
+
+        If the configuration file looks like:
+
+        [profile test]
+        services = my-service
+
+        [services my-service]
+        a = 1
+
+        The linked section type would be 'services'. Calling the provide function
+        would return `{'a': 1}`.
+        """
+        if "services" not in self._scoped_config:
+            return {}
+
+        section_name = self._scoped_config["services"]
+        services_section = self._full_config.get("services", {})
+        linked_section = services_section.get(section_name, {})
+
+        if not linked_section:
+            error_msg = (
+                f'The profile is configured to use the services '
+                f'section but the "{section_name}" services '
+                f"configuration does not exist."
+            )
+            raise InvalidConfigError(error_msg=error_msg)
+
+        return linked_section

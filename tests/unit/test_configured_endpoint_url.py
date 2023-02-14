@@ -188,27 +188,50 @@ class TestCustomEndpointProviderChain(unittest.TestCase):
             expected_value='global-endpoint-url',
         )
 
+    def test_can_provide_global_config_var(self):
+        full_config_map = {
+            'profiles': {
+                'default': {'endpoint_url': 'global-from-config'}}}
+
+        scoped_config_map = full_config_map['profiles']['default']
+
+        self.assert_chain_does_provide(
+            service="ec2",
+            instance_map={},
+            environ_map={},
+            full_config_map=full_config_map,
+            scoped_config_map=scoped_config_map,
+            expected_value='global-from-config',
+        )
+
     def test_can_provide_service_config_var(self):
+
+        full_config_map = {
+            'profiles': {'default': {
+                'services': 'my-services'}},
+            'services': {'my-services': {
+                'batch': {
+                    'endpoint_url': 'global-from-config'}}}}
+
+        scoped_config_map = full_config_map['profiles']['default']
+
         self.assert_chain_does_provide(
             service="batch",
             instance_map={},
             environ_map={},
-            full_config_map={
-                'profiles': {'default': {
-                    'services': 'my-services'}},
-                'services': {'my-services': {
-                    'endpoint_url': 'global-from-config'}}},
-            scoped_config_map={'services': 'my-services'},
+            full_config_map=full_config_map,
+            scoped_config_map=scoped_config_map,
             expected_value='global-from-config',
         )
 
     def test_can_provide_service_config_var_over_global(self):
         full_config_map = \
             {'profiles': {
-                'default': {'services': 'my-services'}},
+                'default': {
+                    'services': 'my-services',
+                    'endpoint_url': 'global-from-config'}},
              'services': {
                 'my-services': {
-                    'endpoint_url': 'global-from-config',
                     'batch': {'endpoint_url': "batch-from-config"}}}}
 
         scoped_config_map = full_config_map['profiles']['default']
@@ -224,12 +247,15 @@ class TestCustomEndpointProviderChain(unittest.TestCase):
     def test_can_provide_service_config_var_over_global_diff_service(self):
         full_config_map = \
             {'profiles': {
-                'default': {'services': 'my-services'}},
+                'default': {'services': 'my-services', 
+                            'endpoint_url': 'global-from-config',
+                            }},
              'services': {
                 'my-services': {
-                    'endpoint_url': 'global-from-config',
                     'batch': {'endpoint_url': "batch-from-config"}}}}
+
         scoped_config_map = full_config_map['profiles']['default']
+
         self.assert_chain_does_provide(
             service="s3",
             instance_map={},
