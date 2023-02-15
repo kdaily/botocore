@@ -27,9 +27,7 @@ import botocore.serialize
 from botocore.config import Config
 from botocore.configprovider import EnvironmentProvider
 from botocore.endpoint import EndpointCreator
-from botocore.exceptions import (
-    InvalidConfigError,
-)
+from botocore.exceptions import InvalidConfigError
 from botocore.regions import EndpointResolverBuiltins as EPRBuiltins
 from botocore.regions import EndpointRulesetResolver
 from botocore.signers import RequestSigner
@@ -287,7 +285,7 @@ class ClientArgsCreator:
 
         if (
             endpoint_url is not None
-            or not self.compute_use_config_endpoint_urls(client_config)
+            or self._compute_ignore_config_endpoint_urls(client_config)
         ):
             return endpoint_url
 
@@ -299,21 +297,16 @@ class ClientArgsCreator:
         endpoint = chain.provide()
         return endpoint
 
-    def compute_use_config_endpoint_urls(self, client_config):
+    def _compute_ignore_config_endpoint_urls(self, client_config):
         if (
             client_config
-            and client_config.use_config_endpoint_urls is not None
+            and client_config.ignore_config_endpoint_urls is not None
         ):
-            return client_config.use_config_endpoint_urls
+            return client_config.ignore_config_endpoint_urls
 
-        use_config_endpoint_urls = self._config_store.get_config_variable(
-            'use_config_endpoint_urls'
+        return self._config_store.get_config_variable(
+            'ignore_config_endpoint_urls'
         )
-
-        if use_config_endpoint_urls is not None:
-            return use_config_endpoint_urls
-
-        return True
 
     def compute_s3_config(self, client_config):
         s3_configuration = self._config_store.get_config_variable('s3')
@@ -779,11 +772,11 @@ class ConfiguredEndpointProviderChain:
         return (
             self._get_services_config()
             .get(snakecase_service_id, {})
-            .get('endpoint_url', None)
+            .get('endpoint_url')
         )
 
     def _get_endpoint_url_config_global(self):
-        return self._scoped_config.get("endpoint_url", None)
+        return self._scoped_config.get("endpoint_url")
 
     def _snakecase_service_id(self, service_id):
         return service_id.replace(" ", "_")

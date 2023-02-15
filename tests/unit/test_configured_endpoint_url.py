@@ -13,11 +13,8 @@
 import pytest
 
 import botocore.session as session
-from botocore.args import (
-    ConfiguredEndpointProviderChain,
-)
+from botocore.args import ConfiguredEndpointProviderChain
 from botocore.model import ServiceModel
-
 from tests import unittest
 
 

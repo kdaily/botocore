@@ -110,8 +110,11 @@ class TestCreateClientArgs(unittest.TestCase):
     def test_compute_configured_endpoint_url(self):
         endpoint_url = self.args_create._compute_configured_endpoint_url(
             client_config=Config(),
-            endpoint_url=self.endpoint_url, scoped_config={},
-            full_config={}, service_model=self._get_service_model())
+            endpoint_url=self.endpoint_url,
+            scoped_config={},
+            full_config={},
+            service_model=self._get_service_model(),
+        )
         self.assertEqual(self.endpoint_url, endpoint_url)
 
     def test_compute_s3_configuration(self):
@@ -229,16 +232,18 @@ class TestCreateClientArgs(unittest.TestCase):
                 m, socket_options=self.default_socket_options
             )
 
-    def test_use_config_endpoint_urls_enabled_default(self):
-        self.assertTrue(
-            self.args_create.compute_use_config_endpoint_urls(
-                client_config=Config()),
+    def test_ignore_config_endpoint_urls_disabled_default(self):
+        self.assertFalse(
+            self.args_create._compute_ignore_config_endpoint_urls(
+                client_config=Config()
+            ),
         )
 
-    def test_use_config_endpoint_urls_disabled_from_config(self):
-        self.assertFalse(
-            self.args_create.compute_use_config_endpoint_urls(
-                client_config=Config(use_config_endpoint_urls=False)),
+    def test_ignore_config_endpoint_urls_enabled_from_config(self):
+        self.assertTrue(
+            self.args_create._compute_ignore_config_endpoint_urls(
+                client_config=Config(ignore_config_endpoint_urls=True)
+            ),
         )
 
     def test_tcp_keepalive_enabled_if_set_anywhere(self):
