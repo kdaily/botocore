@@ -184,8 +184,8 @@ class Config:
 
         Defaults to None.
 
-    :type use_config_endpoint_urls: bool
-    :param use_config_endpoint_urls: Setting to True enables use
+    :type ignore_config_endpoint_urls: bool
+    :param ignore_config_endpoint_urls: Setting to False enables use
         of endpoint URLs provided via environment variables and
         the shared configuration file.
 
@@ -217,7 +217,7 @@ class Config:
             ('endpoint_discovery_enabled', None),
             ('use_dualstack_endpoint', None),
             ('use_fips_endpoint', None),
-            ('use_config_endpoint_urls', None),
+            ('ignore_config_endpoint_urls', None),
             ('defaults_mode', None),
             ('tcp_keepalive', None),
         ]

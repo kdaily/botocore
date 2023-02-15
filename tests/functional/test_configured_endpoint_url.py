@@ -5,12 +5,9 @@ from unittest import mock
 import pytest
 from pytest import fixture
 
-from botocore.compat import urlsplit
 import botocore.configprovider
-from tests import (
-    temporary_file,
-    ClientHTTPStubber,
-)
+from botocore.compat import urlsplit
+from tests import ClientHTTPStubber, temporary_file
 
 ENDPOINT_TESTDATA_FILE = Path(__file__).parent / 'data' / "profile-tests.json"
 
@@ -102,7 +99,7 @@ def test_resolve_custom_endpoint_url(
         )
 
         mock_botocore_session.set_config_variable(
-            'use_config_endpoint_urls', True
+            'ignore_config_endpoint_urls', False
         )
 
         if client_config:

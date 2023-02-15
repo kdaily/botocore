@@ -108,10 +108,10 @@ BOTOCORE_DEFAUT_SESSION_VARIABLES = {
         None,
         utils.ensure_boolean,
     ),
-    'use_config_endpoint_urls': (
-        None,
-        'AWS_USE_CONFIG_ENDPOINT_URLS',
-        None,
+    'ignore_config_endpoint_urls': (
+        'ignore_config_endpoint_urls',
+        'AWS_IGNORE_CONFIG_ENDPOINT_URLS',
+        False,
         utils.ensure_boolean,
     ),
     'parameter_validation': ('parameter_validation', None, True, None),
