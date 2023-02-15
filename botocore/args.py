@@ -209,7 +209,12 @@ class ClientArgsCreator:
                 user_agent += ' %s' % client_config.user_agent_extra
 
         configured_endpoint_url = self._compute_configured_endpoint_url(
-            client_config, endpoint_url, scoped_config, full_config, service_model)
+            client_config,
+            endpoint_url,
+            scoped_config,
+            full_config,
+            service_model,
+        )
 
         s3_config = self.compute_s3_config(client_config)
 
@@ -277,24 +282,33 @@ class ClientArgsCreator:
         endpoint_url,
         scoped_config,
         full_config,
-        service_model
+        service_model,
     ):
 
-        if endpoint_url is not None or not self.compute_use_config_endpoint_urls(client_config):
+        if (
+            endpoint_url is not None
+            or not self.compute_use_config_endpoint_urls(client_config)
+        ):
             return endpoint_url
 
         chain = ConfiguredEndpointProviderChain(
-            full_config=full_config, scoped_config=scoped_config,
-            service_model=service_model)
+            full_config=full_config,
+            scoped_config=scoped_config,
+            service_model=service_model,
+        )
         endpoint = chain.provide()
         return endpoint
 
     def compute_use_config_endpoint_urls(self, client_config):
-        if client_config and client_config.use_config_endpoint_urls is not None:
-             return client_config.use_config_endpoint_urls
+        if (
+            client_config
+            and client_config.use_config_endpoint_urls is not None
+        ):
+            return client_config.use_config_endpoint_urls
 
-        use_config_endpoint_urls = \
-            self._config_store.get_config_variable('use_config_endpoint_urls')
+        use_config_endpoint_urls = self._config_store.get_config_variable(
+            'use_config_endpoint_urls'
+        )
 
         if use_config_endpoint_urls is not None:
             return use_config_endpoint_urls
@@ -699,11 +713,7 @@ class ConfiguredEndpointProviderChain:
     ]
 
     def __init__(
-        self,
-        full_config,
-        scoped_config,
-        service_model,
-        environ=None
+        self, full_config, scoped_config, service_model, environ=None
     ):
         """Initialize a ConfiguredEndpointProviderChain.
 
@@ -735,14 +745,18 @@ class ConfiguredEndpointProviderChain:
         for location in self._ENDPOINT_URL_LOOKUP_ORDER:
             logger.debug(
                 "Looking for endpoint for %s via: %s",
-                self._service_model.service_name, location)
+                self._service_model.service_name,
+                location,
+            )
 
             endpoint_url = getattr(self, f"_get_endpoint_url_{location}")()
 
             if endpoint_url:
                 logger.info(
                     "Found endpoint for %s via: %s.",
-                    self._service_model.service_name, location)
+                    self._service_model.service_name,
+                    location,
+                )
                 return endpoint_url
 
         logger.debug("No configured endpoint found.")
@@ -750,19 +764,23 @@ class ConfiguredEndpointProviderChain:
 
     def _get_endpoint_url_environment_service(self):
         return EnvironmentProvider(
-            name=self._get_service_env_var_name(),
-            env=self._environ).provide()
+            name=self._get_service_env_var_name(), env=self._environ
+        ).provide()
 
     def _get_endpoint_url_environment_global(self):
         return EnvironmentProvider(
-            name="AWS_ENDPOINT_URL",
-            env=self._environ).provide()
+            name="AWS_ENDPOINT_URL", env=self._environ
+        ).provide()
 
     def _get_endpoint_url_config_service(self):
-        snakecase_service_id = \
-            self._snakecase_service_id(self._service_model.service_id).lower()
-        return self._get_services_config().get(
-            snakecase_service_id, {}).get('endpoint_url', None)
+        snakecase_service_id = self._snakecase_service_id(
+            self._service_model.service_id
+        ).lower()
+        return (
+            self._get_services_config()
+            .get(snakecase_service_id, {})
+            .get('endpoint_url', None)
+        )
 
     def _get_endpoint_url_config_global(self):
         return self._scoped_config.get("endpoint_url", None)
@@ -771,19 +789,19 @@ class ConfiguredEndpointProviderChain:
         return service_id.replace(" ", "_")
 
     def _get_service_env_var_name(self):
-        transformed_service_id_env = \
-            self._snakecase_service_id(self._service_model.service_id).upper()
-        service_env_var_name = \
-            f"AWS_ENDPOINT_URL_{transformed_service_id_env}"
-        return service_env_var_name
+        transformed_service_id_env = self._snakecase_service_id(
+            self._service_model.service_id
+        ).upper()
+        return f"AWS_ENDPOINT_URL_{transformed_service_id_env}"
 
     def _get_services_config(self):
         if "services" not in self._scoped_config:
             return {}
 
         section_name = self._scoped_config["services"]
-        services_section = \
-            self._full_config.get("services", {}).get(section_name, {})
+        services_section = self._full_config.get("services", {}).get(
+            section_name
+        )
 
         if not services_section:
             error_msg = (
