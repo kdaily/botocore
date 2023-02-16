@@ -283,7 +283,6 @@ class ClientArgsCreator:
         service_model,
     ):
 
-        logger.debug(f"Ignoring config endpoint urls? {self._compute_ignore_config_endpoint_urls(client_config)}")
         if (
             endpoint_url is not None
             or self._compute_ignore_config_endpoint_urls(client_config)
