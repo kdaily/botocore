@@ -185,7 +185,7 @@ class Config:
         Defaults to None.
 
     :type ignore_config_endpoint_urls: bool
-    :param ignore_config_endpoint_urls: Setting to False enables use
+    :param ignore_config_endpoint_urls: Setting to True disables use
         of endpoint URLs provided via environment variables and
         the shared configuration file.
 

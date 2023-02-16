@@ -283,10 +283,10 @@ class ClientArgsCreator:
         service_model,
     ):
 
-        logger.debug(f"Ignoring config endpoint urls? {self.compute_ignore_config_endpoint_urls(client_config)}")
+        logger.debug(f"Ignoring config endpoint urls? {self._compute_ignore_config_endpoint_urls(client_config)}")
         if (
             endpoint_url is not None
-            or self.compute_ignore_config_endpoint_urls(client_config)
+            or self._compute_ignore_config_endpoint_urls(client_config)
         ):
             return endpoint_url
 
@@ -298,7 +298,7 @@ class ClientArgsCreator:
         endpoint = chain.provide()
         return endpoint
 
-    def compute_ignore_config_endpoint_urls(self, client_config):
+    def _compute_ignore_config_endpoint_urls(self, client_config):
         if (
             client_config
             and client_config.ignore_config_endpoint_urls is not None
@@ -773,11 +773,11 @@ class ConfiguredEndpointProviderChain:
         return (
             self._get_services_config()
             .get(snakecase_service_id, {})
-            .get('endpoint_url', None)
+            .get('endpoint_url')
         )
 
     def _get_endpoint_url_config_global(self):
-        return self._scoped_config.get("endpoint_url", None)
+        return self._scoped_config.get("endpoint_url")
 
     def _snakecase_service_id(self, service_id):
         return service_id.replace(" ", "_")

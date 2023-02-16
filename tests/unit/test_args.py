@@ -234,14 +234,14 @@ class TestCreateClientArgs(unittest.TestCase):
 
     def test_ignore_config_endpoint_urls_disabled_default(self):
         self.assertFalse(
-            self.args_create.compute_ignore_config_endpoint_urls(
+            self.args_create._compute_ignore_config_endpoint_urls(
                 client_config=Config()
             ),
         )
 
     def test_ignore_config_endpoint_urls_enabled_from_config(self):
         self.assertTrue(
-            self.args_create.compute_ignore_config_endpoint_urls(
+            self.args_create._compute_ignore_config_endpoint_urls(
                 client_config=Config(ignore_config_endpoint_urls=True)
             ),
         )
