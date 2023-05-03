@@ -9,7 +9,8 @@ import botocore.configprovider
 from botocore.compat import urlsplit
 from tests import ClientHTTPStubber, temporary_file
 
-ENDPOINT_TESTDATA_FILE = Path(__file__).parent / 'data' / "profile-tests.json"
+ENDPOINT_TESTDATA_FILE = Path(__file__).parent / 'data' \
+    / "configured-endpoint-urls" / "test-cases" / "profile-tests.json"
 
 with open(ENDPOINT_TESTDATA_FILE) as f:
     data = json.load(f)

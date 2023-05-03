@@ -18,16 +18,13 @@ considered internal, and *not* a public API.
 """
 import copy
 import logging
-import os
 import socket
 
 import botocore.exceptions
 import botocore.parsers
 import botocore.serialize
 from botocore.config import Config
-from botocore.configprovider import EnvironmentProvider
 from botocore.endpoint import EndpointCreator
-from botocore.exceptions import InvalidConfigError
 from botocore.regions import EndpointResolverBuiltins as EPRBuiltins
 from botocore.regions import EndpointRulesetResolver
 from botocore.signers import RequestSigner
@@ -91,7 +88,6 @@ class ClientArgsCreator:
         auth_token=None,
         endpoints_ruleset_data=None,
         partition_data=None,
-        full_config=None,
     ):
         final_args = self.compute_client_args(
             service_model,
@@ -101,7 +97,6 @@ class ClientArgsCreator:
             endpoint_url,
             is_secure,
             scoped_config,
-            full_config,
         )
 
         service_name = final_args['service_name']  # noqa
@@ -186,7 +181,6 @@ class ClientArgsCreator:
         endpoint_url,
         is_secure,
         scoped_config,
-        full_config,
     ):
         service_name = service_model.endpoint_prefix
         protocol = service_model.metadata['protocol']
@@ -206,15 +200,13 @@ class ClientArgsCreator:
             if client_config.user_agent_extra is not None:
                 user_agent += ' %s' % client_config.user_agent_extra
 
-        configured_endpoint_url = self._compute_configured_endpoint_url(
-            client_config,
-            endpoint_url,
-            scoped_config,
-            full_config,
-            service_model,
-        )
-
         s3_config = self.compute_s3_config(client_config)
+
+        configured_endpoint_url = self._compute_configured_endpoint_url(
+            service_id=service_model.service_id,
+            client_config=client_config,
+            endpoint_url=endpoint_url,
+        )
 
         endpoint_config = self._compute_endpoint_config(
             service_name=service_name,
@@ -276,11 +268,9 @@ class ClientArgsCreator:
 
     def _compute_configured_endpoint_url(
         self,
+        service_id,
         client_config,
         endpoint_url,
-        scoped_config,
-        full_config,
-        service_model,
     ):
 
         if (
@@ -289,13 +279,8 @@ class ClientArgsCreator:
         ):
             return endpoint_url
 
-        chain = ConfiguredEndpointProviderChain(
-            full_config=full_config,
-            scoped_config=scoped_config,
-            service_model=service_model,
-        )
-        endpoint = chain.provide()
-        return endpoint
+        variable_name = f"configured_endpoint_url_{service_id}"
+        return self._config_store.get_config_variable(variable_name)
 
     def _compute_ignore_config_endpoint_urls(self, client_config):
         if (
@@ -695,113 +680,3 @@ class ClientArgsCreator:
             ),
             EPRBuiltins.SDK_ENDPOINT: given_endpoint,
         }
-
-
-class ConfiguredEndpointProviderChain:
-    _ENDPOINT_URL_LOOKUP_ORDER = [
-        "environment_service",
-        "environment_global",
-        "config_service",
-        "config_global",
-    ]
-
-    def __init__(
-        self, full_config, scoped_config, service_model, environ=None
-    ):
-        """Initialize a ConfiguredEndpointProviderChain.
-
-        :type full_config: dict
-        :param full_config: This is the dict representing the full
-            configuration file.
-
-        :type scoped_config: dict
-        :param scoped_config: This is the dict representing the configuration
-            for the current profile for the session.
-
-        :type service_model: :class:`botocore.model.ServiceModel`
-        :param service_model: This is the service model used to get service
-            name and id.
-
-        :type environ: dict
-        :param environ: A mapping to use for environment variables. If this
-            is not provided it will default to use os.environ.
-        """
-        self._full_config = full_config
-        self._scoped_config = scoped_config
-        self._service_model = service_model
-
-        if environ is None:
-            environ = os.environ
-        self._environ = environ
-
-    def provide(self):
-        for location in self._ENDPOINT_URL_LOOKUP_ORDER:
-            logger.debug(
-                "Looking for endpoint for %s via: %s",
-                self._service_model.service_name,
-                location,
-            )
-
-            endpoint_url = getattr(self, f"_get_endpoint_url_{location}")()
-
-            if endpoint_url:
-                logger.info(
-                    "Found endpoint for %s via: %s.",
-                    self._service_model.service_name,
-                    location,
-                )
-                return endpoint_url
-
-        logger.debug("No configured endpoint found.")
-        return None
-
-    def _get_endpoint_url_environment_service(self):
-        return EnvironmentProvider(
-            name=self._get_service_env_var_name(), env=self._environ
-        ).provide()
-
-    def _get_endpoint_url_environment_global(self):
-        return EnvironmentProvider(
-            name="AWS_ENDPOINT_URL", env=self._environ
-        ).provide()
-
-    def _get_endpoint_url_config_service(self):
-        snakecase_service_id = self._snakecase_service_id(
-            self._service_model.service_id
-        ).lower()
-        return (
-            self._get_services_config()
-            .get(snakecase_service_id, {})
-            .get('endpoint_url')
-        )
-
-    def _get_endpoint_url_config_global(self):
-        return self._scoped_config.get("endpoint_url")
-
-    def _snakecase_service_id(self, service_id):
-        return service_id.replace(" ", "_")
-
-    def _get_service_env_var_name(self):
-        transformed_service_id_env = self._snakecase_service_id(
-            self._service_model.service_id
-        ).upper()
-        return f"AWS_ENDPOINT_URL_{transformed_service_id_env}"
-
-    def _get_services_config(self):
-        if "services" not in self._scoped_config:
-            return {}
-
-        section_name = self._scoped_config["services"]
-        services_section = self._full_config.get("services", {}).get(
-            section_name
-        )
-
-        if not services_section:
-            error_msg = (
-                f'The profile is configured to use the services '
-                f'section but the "{section_name}" services '
-                f"configuration does not exist."
-            )
-            raise InvalidConfigError(error_msg=error_msg)
-
-        return services_section

@@ -45,6 +45,7 @@ from botocore.configprovider import (
     ConfigValueStore,
     DefaultConfigResolver,
     SmartDefaultsConfigStoreFactory,
+    ConfiguredEndpointProviderChain,
     create_botocore_default_config_mapping,
 )
 from botocore.errorfactory import ClientExceptionsFactory
@@ -962,6 +963,19 @@ class Session:
             smart_defaults_factory.merge_smart_defaults(
                 config_store, defaults_mode, region_name
             )
+
+        config_store = copy.deepcopy(config_store)
+        service_model = self.get_service_model(service_name=service_name)
+        chain = ConfiguredEndpointProviderChain(
+            full_config=self.full_config,
+            scoped_config=self.get_scoped_config(),
+            service_model=service_model
+        )
+        config_store.set_config_provider(
+            logical_name=f"configured_endpoint_url_{service_model.service_id}",
+            provider=chain
+        )
+
         client_creator = botocore.client.ClientCreator(
             loader,
             endpoint_resolver,
@@ -984,7 +998,6 @@ class Session:
             client_config=config,
             api_version=api_version,
             auth_token=auth_token,
-            full_config=self.full_config,
         )
         monitor = self._get_internal_component('monitor')
         if monitor is not None:

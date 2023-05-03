@@ -118,14 +118,12 @@ class ClientCreator:
         api_version=None,
         client_config=None,
         auth_token=None,
-        full_config=None,
     ):
         responses = self._event_emitter.emit(
             'choose-service-name', service_name=service_name
         )
         service_name = first_non_none_response(responses, default=service_name)
         service_model = self._load_service_model(service_name, api_version)
-
         try:
             endpoints_ruleset_data = self._load_service_endpoints_ruleset(
                 service_name, api_version
@@ -154,7 +152,6 @@ class ClientCreator:
                 'signatureVersion'
             ),
         )
-
         client_args = self._get_client_args(
             service_model,
             region_name,
@@ -168,7 +165,6 @@ class ClientCreator:
             auth_token,
             endpoints_ruleset_data,
             partition_data,
-            full_config,
         )
         service_client = cls(**client_args)
         self._register_retries(service_client)
@@ -477,7 +473,6 @@ class ClientCreator:
         auth_token,
         endpoints_ruleset_data,
         partition_data,
-        full_config,
     ):
         args_creator = ClientArgsCreator(
             self._event_emitter,
@@ -500,7 +495,6 @@ class ClientCreator:
             auth_token,
             endpoints_ruleset_data,
             partition_data,
-            full_config,
         )
 
     def _create_methods(self, service_model):
