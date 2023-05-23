@@ -373,6 +373,36 @@ class TestConfigValueStore(unittest.TestCase):
         value = config_store_deepcopy.get_config_variable('fake_variable')
         self.assertEqual(value, 'override-value')
 
+    def test_can_copy(self):
+        fake_variable_provider = ConstantProvider(100)
+        another_variable_provider = EnvironmentProvider(
+            name='AWS_ANOTHER_VARIABLE', env=dict(AWS_ANOTHER_VARIABLE='123')
+        )
+        config_store = ConfigValueStore(
+            mapping={
+                'fake_variable': fake_variable_provider,
+                'another_variable': another_variable_provider,
+            }
+        )
+        config_store.set_config_variable('another_variable', 'override-value')
+
+        config_store_copy = copy.copy(config_store)
+
+        self.assertEqual(
+            config_store.get_config_provider('fake_variable'),
+            config_store_copy.get_config_provider('fake_variable'),
+        )
+
+    def test_copy_preserves_overrides(self):
+        provider = ConstantProvider(100)
+        config_store = ConfigValueStore(mapping={'fake_variable': provider})
+        config_store.set_config_variable('fake_variable', 'override-value')
+
+        config_store_copy = copy.copy(config_store)
+
+        value = config_store_copy.get_config_variable('fake_variable')
+        self.assertEqual(value, 'override-value')
+
 
 class TestInstanceVarProvider(unittest.TestCase):
     def assert_provides_value(self, name, instance_map, expected_value):

@@ -10,10 +10,14 @@
 # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
+from pathlib import Path
+
 import pytest
 
+import botocore.exceptions
 from botocore.config import Config
 from botocore.session import get_session
+from tests import mock
 
 _SDK_DEFAULT_CONFIGURATION_VALUES_ALLOWLIST = (
     'retryMode',
@@ -49,3 +53,68 @@ def test_default_configurations_resolve_correctly():
     assert client.meta.config.connect_timeout == 3.1
     assert client.meta.endpoint_url == 'https://sts.us-west-2.amazonaws.com'
     assert client.meta.config.retries['mode'] == 'standard'
+
+
+def _create_functional_test_loader():
+    test_models_dir = Path(__file__).parent / 'models' / 'test-smart-defaults'
+    loader = botocore.loaders.Loader()
+    loader.search_paths.insert(0, test_models_dir)
+    return loader
+
+
+@pytest.fixture
+def session():
+    loader = _create_functional_test_loader()
+    session = botocore.session.Session()
+    session.register_component('data_loader', loader)
+    return session
+
+
+def config_store_updated(original_config_store, updated_config_store):
+    return original_config_store is not updated_config_store
+
+
+class TestSmartDefaultsConfigStoreFactory:
+    @mock.patch('botocore.client.ClientCreator')
+    def test_defaults_mode_resolved_from_config_store(
+        self, client_creator, session
+    ):
+        config_store = session.get_component('config_store')
+        config_store.set_config_variable('defaults_mode', 'standard')
+        session.create_client('sts', 'us-west-2')
+        assert (
+            client_creator.call_args[0][-1].get_config_variable(
+                "connect_timeout"
+            )
+            == 9999
+        )
+        assert config_store_updated(
+            client_creator.call_args[0][-1], config_store
+        )
+
+    @mock.patch('botocore.client.ClientCreator')
+    def test_defaults_mode_resolved_from_client_config(
+        self, client_creator, session
+    ):
+        config = Config(defaults_mode='standard')
+        session.create_client('sts', 'us-west-2', config=config)
+        assert (
+            client_creator.call_args[0][-1].get_config_variable(
+                "connect_timeout"
+            )
+            == 9999
+        )
+
+    def test_defaults_mode_resolved_invalid_mode_exception(self, session):
+        with pytest.raises(botocore.exceptions.InvalidDefaultsMode):
+            config = Config(defaults_mode='foo')
+            session.create_client('sts', 'us-west-2', config=config)
+
+    @mock.patch(
+        'botocore.session.SmartDefaultsConfigStoreFactory.merge_smart_defaults'
+    )
+    def test_defaults_mode_resolved_legacy(
+        self, merge_smart_defaults, session
+    ):
+        session.create_client('sts', 'us-west-2')
+        merge_smart_defaults.assert_not_called()
