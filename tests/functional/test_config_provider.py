@@ -57,7 +57,7 @@ def test_default_configurations_resolve_correctly():
 
 @pytest.fixture
 def loader():
-    test_models_dir = Path(__file__).parent / 'models' / 'test-smart-defaults'
+    test_models_dir = Path(__file__).parent / 'models'
     loader = botocore.loaders.Loader()
     loader.search_paths.insert(0, test_models_dir)
     return loader

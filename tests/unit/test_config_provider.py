@@ -703,50 +703,71 @@ class TestSmartDefaults:
         assert config_store.get_config_variable('fizz') is None
         assert config_store_copy.get_config_variable('foo') == 'bar'
 
-    def test_config_store_providers_not_mutated_after_merge(
-        self, fake_session
-    ):
+    def test_config_store_providers_not_mutated_after_merge(self):
+        imds_region_provider = mock.Mock(spec=IMDSRegionProvider)
+        default_config_resolver = self._create_default_config_resolver()
+        smart_defaults_factory = SmartDefaultsConfigStoreFactory(
+            default_config_resolver, imds_region_provider
+        )
+
+        fake_session = mock.Mock(spec=session.Session)
+        fake_session.get_scoped_config.return_value = {}
+
+        s3_section_provider = SectionConfigProvider(
+            's3', fake_session, {}
+        )
+
         constant_provider = ConstantProvider(value='foo')
         environment_provider = EnvironmentProvider(
             name='AWS_RETRY_MODE', env={'AWS_RETRY_MODE': None}
         )
-        fake_session = mock.Mock(spec=session.Session)
-        fake_session.get_scoped_config.return_value = {}
+
+        sts_regional_endpoints_provider = \
+            ChainProvider(providers=[constant_provider])
+
+        retry_mode_provider = ChainProvider(providers=[environment_provider])
 
         mapping = {
-            'sts_regional_endpoints': ChainProvider(
-                providers=[constant_provider]
-            ),
-            'retry_mode': ChainProvider(providers=[environment_provider]),
-            's3': SectionConfigProvider('s3', fake_session, {}),
+            'sts_regional_endpoints': sts_regional_endpoints_provider,
+            'retry_mode': retry_mode_provider,
+            's3': s3_section_provider,
         }
+
         config_store = ConfigValueStore(mapping=mapping)
-        fake_session.register_component('config_store', config_store)
-        session_config_store = fake_session.get_component('config_store')
 
-        chain_provider_before = session_config_store.get_config_provider(
-            'sts_regional_endpoints'
+        sts_regional_endpoints_before = sts_regional_endpoints_provider.provide()
+        s3_section_before = s3_section_provider.provide()
+        retry_mode_before = retry_mode_provider.provide()
+
+        smart_defaults_factory.merge_smart_defaults(
+            config_store, 'standard', 'foo'
         )
-        section_provider_before = session_config_store.get_config_provider(
-            's3'
-        )
 
-        _ = fake_session.create_client('sts')
+        sts_regional_endpoints_after = \
+            config_store.get_config_variable('sts_regional_endpoints')
+        s3_section_after = \
+            config_store.get_config_variable('s3')
+        retry_mode_after = \
+            config_store.get_config_variable('retry_mode')
 
-        chain_provider_after = session_config_store.get_config_provider(
-            'sts_regional_endpoints'
-        )
-        section_provider_after = session_config_store.get_config_provider('s3')
+        assert sts_regional_endpoints_provider.provide() == \
+            sts_regional_endpoints_before
+        assert sts_regional_endpoints_before != sts_regional_endpoints_after
 
-        assert chain_provider_before == chain_provider_after
-        assert section_provider_before == section_provider_after
+        assert s3_section_provider.provide() == \
+            s3_section_before
+        assert s3_section_before != s3_section_after
+
+        assert retry_mode_provider.provide() == \
+            retry_mode_before
+        assert retry_mode_before != retry_mode_after
 
     def test_config_store_providers_not_added_after_copy(self):
         config_store = self._create_config_value_store()
         config_store_copy = copy.copy(config_store)
         config_store_copy.set_config_provider('fizz', ConstantProvider('buzz'))
         assert config_store.get_config_variable('fizz') is None
-        assert config_store_copy.get_config_variable('foo') == 'bar'
+        assert config_store_copy.get_config_variable('sts_regional_endpoints') == 'foo'
 
     @pytest.mark.parametrize(
         'defaults_mode, retry_mode, sts_regional_endpoints,'
