@@ -55,7 +55,8 @@ def test_default_configurations_resolve_correctly():
     assert client.meta.config.retries['mode'] == 'standard'
 
 
-def _create_functional_test_loader():
+@pytest.fixture
+def loader():
     test_models_dir = Path(__file__).parent / 'models' / 'test-smart-defaults'
     loader = botocore.loaders.Loader()
     loader.search_paths.insert(0, test_models_dir)
@@ -63,8 +64,7 @@ def _create_functional_test_loader():
 
 
 @pytest.fixture
-def session():
-    loader = _create_functional_test_loader()
+def session(loader):
     session = botocore.session.Session()
     session.register_component('data_loader', loader)
     return session
@@ -91,6 +91,22 @@ class TestSmartDefaultsConfigStoreFactory:
         assert config_store_updated(
             client_creator.call_args[0][-1], config_store
         )
+
+    def test_no_mutate_session_provider(self, session):
+        # Using the standard default mode should change the connect timeout
+        # on the client, but not the session
+        standard_client = session.create_client(
+            'sts', 'us-west-2', config=Config(defaults_mode='standard')
+        )
+        assert standard_client.meta.config.connect_timeout == 9999.0
+        assert session.get_config_variable('connect_timeout') is None
+
+        # Using the legacy default mode should not change the connect timeout
+        # on the client or the session. By default the connect timeout for a client
+        # is 60 seconds, and unset on the session.
+        legacy_client = session.create_client('sts', 'us-west-2')
+        assert legacy_client.meta.config.connect_timeout == 60
+        assert session.get_config_variable('connect_timeout') is None
 
     @mock.patch('botocore.client.ClientCreator')
     def test_defaults_mode_resolved_from_client_config(

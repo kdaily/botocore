@@ -2,8 +2,8 @@
   "version": 1,
   "base": {
     "retryMode": "standard",
-    "stsRegionalEndpoints": "galaxial",
-    "s3UsEast1RegionalEndpoints": "galaxial",
+    "stsRegionalEndpoints": "regional",
+    "s3UsEast1RegionalEndpoints": "regional",
     "connectTimeoutInMillis": 9999000,
     "tlsNegotiationTimeoutInMillis": 9999000
   },

@@ -553,20 +553,22 @@ class SmartDefaultsConfigStoreFactory:
         return 'standard'
 
     def _update_provider(self, config_store, variable, value):
-        provider = copy.copy(config_store.get_config_provider(variable))
+        original_provider = config_store.get_config_provider(variable)
         default_provider = ConstantProvider(value)
-        if provider is None:
-            provider = default_provider
-        elif isinstance(provider, ChainProvider):
-            provider.set_default_provider(default_provider)
-        elif isinstance(provider, BaseProvider):
-            provider = ChainProvider(providers=[provider, default_provider])
-        config_store.set_config_provider(variable, provider)
+        if isinstance(original_provider, ChainProvider):
+            chain_provider_copy = copy.copy(original_provider)
+            chain_provider_copy.set_default_provider(default_provider)
+            default_provider = chain_provider_copy
+        elif isinstance(original_provider, BaseProvider):
+            default_provider = ChainProvider(
+                providers=[original_provider, default_provider]
+            )
+        config_store.set_config_provider(variable, default_provider)
 
     def _update_section_provider(
         self, config_store, section_name, variable, value
     ):
-        section_provider = copy.copy(
+        section_provider = copy.deepcopy(
             config_store.get_config_provider(section_name)
         )
         section_provider.set_default_provider(
