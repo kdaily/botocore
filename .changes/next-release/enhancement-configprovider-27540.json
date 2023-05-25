@@ -1,0 +1,5 @@
+{
+  "type": "enhancement",
+  "category": "configprovider",
+  "description": "Use shallow copy instead of deep copy for config value store"
+}
