@@ -568,13 +568,13 @@ class SmartDefaultsConfigStoreFactory:
     def _update_section_provider(
         self, config_store, section_name, variable, value
     ):
-        section_provider = copy.deepcopy(
+        section_provider_copy = copy.deepcopy(
             config_store.get_config_provider(section_name)
         )
-        section_provider.set_default_provider(
+        section_provider_copy.set_default_provider(
             variable, ConstantProvider(value)
         )
-        config_store.set_config_provider(section_name, section_provider)
+        config_store.set_config_provider(section_name, section_provider_copy)
 
     def _set_retryMode(self, config_store, value):
         self._update_provider(config_store, 'retry_mode', value)

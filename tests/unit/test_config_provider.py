@@ -384,11 +384,10 @@ class TestConfigValueStore(unittest.TestCase):
                 'another_variable': another_variable_provider,
             }
         )
-        config_store.set_config_variable('another_variable', 'override-value')
 
         config_store_copy = copy.copy(config_store)
 
-        self.assertEqual(
+        self.assertIs(
             config_store.get_config_provider('fake_variable'),
             config_store_copy.get_config_provider('fake_variable'),
         )
@@ -402,6 +401,25 @@ class TestConfigValueStore(unittest.TestCase):
 
         value = config_store_copy.get_config_variable('fake_variable')
         self.assertEqual(value, 'override-value')
+
+    def test_copy_does_not_mutate(self):
+        fake_variable_provider = ConstantProvider(100)
+        config_store = ConfigValueStore(
+            mapping={
+                'fake_variable': fake_variable_provider,
+            }
+        )
+
+        config_store_copy = copy.copy(config_store)
+
+        another_variable_provider = EnvironmentProvider(
+            name='AWS_ANOTHER_VARIABLE', env=dict(AWS_ANOTHER_VARIABLE='123')
+        )
+        config_store_copy.set_config_provider(
+            'another_variable', another_variable_provider
+        )
+
+        assert config_store.get_config_provider('another_variable') is None
 
 
 class TestInstanceVarProvider(unittest.TestCase):
@@ -673,8 +691,8 @@ class TestSmartDefaults:
         return fake_session
 
     def _create_config_value_store(self, s3_mapping={}, **override_kwargs):
-        provider_foo = ConstantProvider(value='foo')
-        environment_provider_foo = EnvironmentProvider(
+        constant_provider = ConstantProvider(value='foo')
+        environment_provider = EnvironmentProvider(
             name='AWS_RETRY_MODE', env={'AWS_RETRY_MODE': None}
         )
         fake_session = mock.Mock(spec=session.Session)
@@ -682,8 +700,10 @@ class TestSmartDefaults:
         # Testing with three different providers to validate
         # SmartDefaultsConfigStoreFactory._get_new_chain_provider
         mapping = {
-            'sts_regional_endpoints': ChainProvider(providers=[provider_foo]),
-            'retry_mode': ChainProvider(providers=[environment_provider_foo]),
+            'sts_regional_endpoints': ChainProvider(
+                providers=[constant_provider]
+            ),
+            'retry_mode': ChainProvider(providers=[environment_provider]),
             's3': SectionConfigProvider('s3', fake_session, s3_mapping),
         }
         mapping.update(**override_kwargs)
@@ -697,11 +717,15 @@ class TestSmartDefaults:
 
     def test_config_store_deepcopy(self):
         config_store = ConfigValueStore()
-        config_store.set_config_provider('foo', ConstantProvider('bar'))
+        config_store.set_config_provider(
+            'constant_value', ConstantProvider('ABC')
+        )
         config_store_copy = copy.deepcopy(config_store)
-        config_store_copy.set_config_provider('fizz', ConstantProvider('buzz'))
-        assert config_store.get_config_variable('fizz') is None
-        assert config_store_copy.get_config_variable('foo') == 'bar'
+        config_store_copy.set_config_provider(
+            'constant_value_copy', ConstantProvider('123')
+        )
+        assert config_store.get_config_variable('constant_value_copy') is None
+        assert config_store_copy.get_config_variable('constant_value') == 'ABC'
 
     @pytest.fixture
     def config_value_store(self):
@@ -725,7 +749,7 @@ class TestSmartDefaults:
         retry_mode_before = retry_mode_provider.provide()
 
         smart_defaults_factory.merge_smart_defaults(
-            config_value_store, 'standard', 'foo'
+            config_value_store, 'standard', 'some-region'
         )
 
         sts_regional_endpoints_after = config_value_store.get_config_variable(
@@ -749,12 +773,31 @@ class TestSmartDefaults:
     def test_config_store_providers_not_added_after_copy(self):
         config_store = self._create_config_value_store()
         config_store_copy = copy.copy(config_store)
-        config_store_copy.set_config_provider('fizz', ConstantProvider('buzz'))
-        assert config_store.get_config_variable('fizz') is None
+
+        config_store_copy.set_config_provider(
+            'constant_value', ConstantProvider('123')
+        )
+        assert config_store.get_config_variable('constant_value') is None
         assert (
             config_store_copy.get_config_variable('sts_regional_endpoints')
             == 'foo'
         )
+
+    def test_provider_not_mutated_after_copy(self):
+        environment_provider = EnvironmentProvider(
+            name='AWS_ANOTHER_VARIABLE', env=dict(AWS_ANOTHER_VARIABLE='123')
+        )
+        chain_provider = ChainProvider([environment_provider])
+
+        chain_provider_copy = copy.copy(chain_provider)
+
+        assert chain_provider._providers[0] is environment_provider
+
+        constant_provider = ConstantProvider("ABC")
+        chain_provider_copy._providers.insert(0, constant_provider)
+
+        assert chain_provider.provide() == '123'
+        assert chain_provider_copy.provide() == 'ABC'
 
     @pytest.mark.parametrize(
         'defaults_mode, retry_mode, sts_regional_endpoints,'

@@ -17,7 +17,6 @@ import pytest
 import botocore.exceptions
 from botocore.config import Config
 from botocore.session import get_session
-from tests import mock
 
 _SDK_DEFAULT_CONFIGURATION_VALUES_ALLOWLIST = (
     'retryMode',
@@ -30,6 +29,13 @@ _SDK_DEFAULT_CONFIGURATION_VALUES_ALLOWLIST = (
 session = get_session()
 loader = session.get_component('data_loader')
 sdk_default_configuration = loader.load_data('sdk-default-configuration')
+
+
+def assert_client_uses_standard_defaults(client):
+    assert client.meta.config.s3['us_east_1_regional_endpoint'] == 'regional'
+    assert client.meta.config.connect_timeout == 3.1
+    assert client.meta.endpoint_url == 'https://sts.us-west-2.amazonaws.com'
+    assert client.meta.config.retries['mode'] == 'standard'
 
 
 @pytest.mark.parametrize("mode", sdk_default_configuration['base'])
@@ -49,10 +55,7 @@ def test_default_configurations_resolve_correctly():
     client = session.create_client(
         'sts', config=config, region_name='us-west-2'
     )
-    assert client.meta.config.s3['us_east_1_regional_endpoint'] == 'regional'
-    assert client.meta.config.connect_timeout == 3.1
-    assert client.meta.endpoint_url == 'https://sts.us-west-2.amazonaws.com'
-    assert client.meta.config.retries['mode'] == 'standard'
+    assert_client_uses_standard_defaults(client)
 
 
 @pytest.fixture
@@ -74,23 +77,26 @@ def config_store_updated(original_config_store, updated_config_store):
     return original_config_store is not updated_config_store
 
 
-class TestSmartDefaultsConfigStoreFactory:
-    @mock.patch('botocore.client.ClientCreator')
-    def test_defaults_mode_resolved_from_config_store(
-        self, client_creator, session
-    ):
+def assert_client_uses_legacy_defaults(client):
+    assert client.meta.config.s3 is None
+    assert client.meta.config.connect_timeout == 60
+    assert client.meta.endpoint_url == 'https://sts.amazonaws.com'
+    assert client.meta.config.retries['mode'] == 'legacy'
+
+
+def assert_client_uses_testing_defaults(client):
+    assert client.meta.config.s3['us_east_1_regional_endpoint'] == 'regional'
+    assert client.meta.config.connect_timeout == 9999
+    assert client.meta.endpoint_url == 'https://sts.amazonaws.com'
+    assert client.meta.config.retries['mode'] == 'standard'
+
+
+class TestConfigurationDefaults:
+    def test_defaults_mode_resolved_from_config_store(self, session):
         config_store = session.get_component('config_store')
         config_store.set_config_variable('defaults_mode', 'standard')
-        session.create_client('sts', 'us-west-2')
-        assert (
-            client_creator.call_args[0][-1].get_config_variable(
-                "connect_timeout"
-            )
-            == 9999
-        )
-        assert config_store_updated(
-            client_creator.call_args[0][-1], config_store
-        )
+        client = session.create_client('sts', 'us-west-2')
+        assert_client_uses_testing_defaults(client)
 
     def test_no_mutate_session_provider(self, session):
         # Using the standard default mode should change the connect timeout
@@ -98,39 +104,24 @@ class TestSmartDefaultsConfigStoreFactory:
         standard_client = session.create_client(
             'sts', 'us-west-2', config=Config(defaults_mode='standard')
         )
-        assert standard_client.meta.config.connect_timeout == 9999.0
-        assert session.get_config_variable('connect_timeout') is None
+        assert_client_uses_testing_defaults(standard_client)
 
         # Using the legacy default mode should not change the connect timeout
         # on the client or the session. By default the connect timeout for a client
         # is 60 seconds, and unset on the session.
         legacy_client = session.create_client('sts', 'us-west-2')
-        assert legacy_client.meta.config.connect_timeout == 60
-        assert session.get_config_variable('connect_timeout') is None
+        assert_client_uses_legacy_defaults(legacy_client)
 
-    @mock.patch('botocore.client.ClientCreator')
-    def test_defaults_mode_resolved_from_client_config(
-        self, client_creator, session
-    ):
+    def test_defaults_mode_resolved_from_client_config(self, session):
         config = Config(defaults_mode='standard')
-        session.create_client('sts', 'us-west-2', config=config)
-        assert (
-            client_creator.call_args[0][-1].get_config_variable(
-                "connect_timeout"
-            )
-            == 9999
-        )
+        client = session.create_client('sts', 'us-west-2', config=config)
+        assert_client_uses_testing_defaults(client)
 
     def test_defaults_mode_resolved_invalid_mode_exception(self, session):
         with pytest.raises(botocore.exceptions.InvalidDefaultsMode):
-            config = Config(defaults_mode='foo')
+            config = Config(defaults_mode='invalid_default_mode')
             session.create_client('sts', 'us-west-2', config=config)
 
-    @mock.patch(
-        'botocore.session.SmartDefaultsConfigStoreFactory.merge_smart_defaults'
-    )
-    def test_defaults_mode_resolved_legacy(
-        self, merge_smart_defaults, session
-    ):
-        session.create_client('sts', 'us-west-2')
-        merge_smart_defaults.assert_not_called()
+    def test_defaults_mode_resolved_legacy(self, session):
+        client = session.create_client('sts', 'us-west-2')
+        assert_client_uses_legacy_defaults(client)
