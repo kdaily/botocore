@@ -73,10 +73,6 @@ def session(loader):
     return session
 
 
-def config_store_updated(original_config_store, updated_config_store):
-    return original_config_store is not updated_config_store
-
-
 def assert_client_uses_legacy_defaults(client):
     assert client.meta.config.s3 is None
     assert client.meta.config.connect_timeout == 60
