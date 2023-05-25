@@ -783,22 +783,6 @@ class TestSmartDefaults:
             == 'foo'
         )
 
-    def test_provider_not_mutated_after_copy(self):
-        environment_provider = EnvironmentProvider(
-            name='AWS_ANOTHER_VARIABLE', env=dict(AWS_ANOTHER_VARIABLE='123')
-        )
-        chain_provider = ChainProvider([environment_provider])
-
-        chain_provider_copy = copy.copy(chain_provider)
-
-        assert chain_provider._providers[0] is environment_provider
-
-        constant_provider = ConstantProvider("ABC")
-        chain_provider_copy._providers.insert(0, constant_provider)
-
-        assert chain_provider.provide() == '123'
-        assert chain_provider_copy.provide() == 'ABC'
-
     @pytest.mark.parametrize(
         'defaults_mode, retry_mode, sts_regional_endpoints,'
         ' us_east_1_regional_endpoint, connect_timeout',

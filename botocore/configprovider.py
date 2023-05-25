@@ -556,7 +556,7 @@ class SmartDefaultsConfigStoreFactory:
         original_provider = config_store.get_config_provider(variable)
         default_provider = ConstantProvider(value)
         if isinstance(original_provider, ChainProvider):
-            chain_provider_copy = copy.copy(original_provider)
+            chain_provider_copy = copy.deepcopy(original_provider)
             chain_provider_copy.set_default_provider(default_provider)
             default_provider = chain_provider_copy
         elif isinstance(original_provider, BaseProvider):
@@ -632,9 +632,6 @@ class ChainProvider(BaseProvider):
             copy.deepcopy(self._providers, memo), self._conversion_func
         )
 
-    def __copy__(self):
-        return ChainProvider(copy.copy(self._providers), self._conversion_func)
-
     def provide(self):
         """Provide the value from the first provider to return non-None.
 
@@ -696,11 +693,6 @@ class InstanceVarProvider(BaseProvider):
             copy.deepcopy(self._instance_var, memo), self._session
         )
 
-    def __copy__(self):
-        return InstanceVarProvider(
-            copy.copy(self._instance_var), self._session
-        )
-
     def provide(self):
         """Provide a config value from the session instance vars."""
         instance_vars = self._session.instance_variables()
@@ -734,11 +726,6 @@ class ScopedConfigProvider(BaseProvider):
     def __deepcopy__(self, memo):
         return ScopedConfigProvider(
             copy.deepcopy(self._config_var_name, memo), self._session
-        )
-
-    def __copy__(self):
-        return ScopedConfigProvider(
-            copy.copy(self._config_var_name), self._session
         )
 
     def provide(self):
@@ -778,9 +765,6 @@ class EnvironmentProvider(BaseProvider):
             copy.deepcopy(self._name, memo), copy.deepcopy(self._env, memo)
         )
 
-    def __copy__(self):
-        return EnvironmentProvider(copy.copy(self._name), copy.copy(self._env))
-
     def provide(self):
         """Provide a config value from a source dictionary."""
         if self._name in self._env:
@@ -813,13 +797,6 @@ class SectionConfigProvider(BaseProvider):
             copy.deepcopy(self._section_name, memo),
             self._session,
             copy.deepcopy(self._override_providers, memo),
-        )
-
-    def __copy__(self):
-        return SectionConfigProvider(
-            copy.copy(self._section_name),
-            self._session,
-            copy.copy(self._override_providers),
         )
 
     def provide(self):
@@ -867,9 +844,6 @@ class ConstantProvider(BaseProvider):
 
     def __deepcopy__(self, memo):
         return ConstantProvider(copy.deepcopy(self._value, memo))
-
-    def __copy__(self):
-        return ConstantProvider(copy.copy(self._value))
 
     def provide(self):
         """Provide the constant value given during initialization."""
