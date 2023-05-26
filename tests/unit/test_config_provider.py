@@ -418,8 +418,14 @@ class TestConfigValueStore(unittest.TestCase):
             'fake_variable', another_variable_provider
         )
 
-        assert config_store.get_config_provider('fake_variable') is fake_variable_provider
-        assert config_store_copy.get_config_provider('fake_variable') is another_variable_provider
+        assert (
+            config_store.get_config_provider('fake_variable')
+            is fake_variable_provider
+        )
+        assert (
+            config_store_copy.get_config_provider('fake_variable')
+            is another_variable_provider
+        )
 
 
 class TestInstanceVarProvider(unittest.TestCase):
@@ -733,7 +739,7 @@ class TestSmartDefaults:
 
     @pytest.mark.parametrize(
         'defaults_mode',
-        ['standard', 'in-region', 'cross-region', 'mobile', 'auto']
+        ['standard', 'in-region', 'cross-region', 'mobile', 'auto'],
     )
     def test_config_store_providers_not_mutated_after_merge(
         self, defaults_mode, smart_defaults_factory
@@ -749,7 +755,9 @@ class TestSmartDefaults:
             )
         }
 
-        config_value_store = self._create_config_value_store(s3_mapping=s3_mapping)
+        config_value_store = self._create_config_value_store(
+            s3_mapping=s3_mapping
+        )
 
         sts_regional_endpoints_provider = (
             config_value_store.get_config_provider('sts_regional_endpoints')
@@ -801,9 +809,15 @@ class TestSmartDefaults:
             'fake_variable', another_variable_provider
         )
 
-        assert config_store.get_config_provider('fake_variable') is fake_variable_provider
+        assert (
+            config_store.get_config_provider('fake_variable')
+            is fake_variable_provider
+        )
         assert config_store.get_config_variable('fake_variable') == 100
-        assert config_store_copy.get_config_provider('fake_variable') is another_variable_provider
+        assert (
+            config_store_copy.get_config_provider('fake_variable')
+            is another_variable_provider
+        )
         assert config_store_copy.get_config_variable('fake_variable') == 'ABC'
 
     @pytest.mark.parametrize(
