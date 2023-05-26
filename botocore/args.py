@@ -107,7 +107,7 @@ class ClientArgsCreator:
         s3_config = final_args['s3_config']
         partition = endpoint_config['metadata'].get('partition', None)
         socket_options = final_args['socket_options']
-
+        configured_endpoint_url = final_args['configured_endpoint_url']
         signing_region = endpoint_config['signing_region']
         endpoint_region_name = endpoint_config['region_name']
 
@@ -139,7 +139,6 @@ class ClientArgsCreator:
             client_cert=new_config.client_cert,
             proxies_config=new_config.proxies_config,
         )
-
         serializer = botocore.serialize.create_serializer(
             protocol, parameter_validation
         )
@@ -152,7 +151,7 @@ class ClientArgsCreator:
             service_model,
             endpoint_region_name,
             region_name,
-            endpoint_url,
+            configured_endpoint_url,
             endpoint,
             is_secure,
             endpoint_bridge,
@@ -202,10 +201,17 @@ class ClientArgsCreator:
                 user_agent += ' %s' % client_config.user_agent_extra
 
         s3_config = self.compute_s3_config(client_config)
+
+        configured_endpoint_url = self._compute_configured_endpoint_url(
+            service_id=service_model.service_id,
+            client_config=client_config,
+            endpoint_url=endpoint_url,
+        )
+
         endpoint_config = self._compute_endpoint_config(
             service_name=service_name,
             region_name=region_name,
-            endpoint_url=endpoint_url,
+            endpoint_url=configured_endpoint_url,
             is_secure=is_secure,
             endpoint_bridge=endpoint_bridge,
             s3_config=s3_config,
@@ -250,6 +256,7 @@ class ClientArgsCreator:
             'service_name': service_name,
             'parameter_validation': parameter_validation,
             'user_agent': user_agent,
+            'configured_endpoint_url': configured_endpoint_url,
             'endpoint_config': endpoint_config,
             'protocol': protocol,
             'config_kwargs': config_kwargs,
@@ -258,6 +265,32 @@ class ClientArgsCreator:
                 scoped_config, client_config
             ),
         }
+
+    def _compute_configured_endpoint_url(
+        self,
+        service_id,
+        client_config,
+        endpoint_url,
+    ):
+        if (
+            endpoint_url is not None
+            or self._compute_ignore_config_endpoint_urls(client_config)
+        ):
+            return endpoint_url
+
+        variable_name = f"configured_endpoint_url_{service_id}"
+        return self._config_store.get_config_variable(variable_name)
+
+    def _compute_ignore_config_endpoint_urls(self, client_config):
+        if (
+            client_config
+            and client_config.ignore_config_endpoint_urls is not None
+        ):
+            return client_config.ignore_config_endpoint_urls
+
+        return self._config_store.get_config_variable(
+            'ignore_config_endpoint_urls'
+        )
 
     def compute_s3_config(self, client_config):
         s3_configuration = self._config_store.get_config_variable('s3')

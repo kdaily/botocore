@@ -42,6 +42,7 @@ from botocore.compat import HAS_CRT, MutableMapping
 from botocore.configprovider import (
     BOTOCORE_DEFAUT_SESSION_VARIABLES,
     ConfigChainFactory,
+    ConfiguredEndpointProviderChain,
     ConfigValueStore,
     DefaultConfigResolver,
     SmartDefaultsConfigStoreFactory,
@@ -962,6 +963,18 @@ class Session:
             smart_defaults_factory.merge_smart_defaults(
                 config_store, defaults_mode, region_name
             )
+
+        service_model = self.get_service_model(service_name=service_name)
+        chain = ConfiguredEndpointProviderChain(
+            full_config=self.full_config,
+            scoped_config=self.get_scoped_config(),
+            service_model=service_model,
+        )
+        config_store.set_config_provider(
+            logical_name=f"configured_endpoint_url_{service_model.service_id}",
+            provider=chain,
+        )
+
         client_creator = botocore.client.ClientCreator(
             loader,
             endpoint_resolver,
