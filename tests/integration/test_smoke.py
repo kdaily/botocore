@@ -41,7 +41,6 @@ SMOKE_TESTS = {
     'cloudformation': {'DescribeStacks': {}, 'ListStacks': {}},
     'cloudfront': {'ListDistributions': {}, 'ListStreamingDistributions': {}},
     'cloudhsmv2': {'DescribeBackups': {}},
-    'cloudsearch': {'DescribeDomains': {}, 'ListDomainNames': {}},
     'cloudtrail': {'DescribeTrails': {}},
     'cloudwatch': {'ListMetrics': {}},
     'codecommit': {'ListRepositories': {}},
@@ -132,7 +131,6 @@ ERROR_TESTS = {
     },
     'cloudfront': {'GetDistribution': {'Id': 'fake-id'}},
     'cloudhsmv2': {'ListTags': {'ResourceId': 'fake-id'}},
-    'cloudsearch': {'DescribeIndexFields': {'DomainName': 'fakedomain'}},
     'cloudtrail': {'DeleteTrail': {'Name': 'fake-trail'}},
     'cloudwatch': {
         'SetAlarmState': {
